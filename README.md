@@ -99,6 +99,34 @@ Test-set classification at `P(malignant) >= 0.50`:
 
 The test-set confusion matrix contains 41 true positives, 67 true negatives, 5 false positives, and 1 false negative when malignancy is treated as the positive class. The test Brier score is 0.030 versus 0.233 for the training-prevalence null model. The Hosmer-Lemeshow result is chi-square = 3.37 with 8 degrees of freedom and `p = 0.909`; this does not provide evidence of lack of fit in this small held-out sample.
 
+### Model evaluation figures
+
+The figures below are rendered from the checked-in `bc_bundle.pkl`, so they correspond to the same fixed train/test split and fitted model reported above.
+
+#### Discrimination and fitted coefficients
+
+Panel A compares the train and held-out test ROC curves. Panel B shows the fitted logistic-regression coefficients after robust scaling; positive coefficients increase `P(benign)`, whereas negative coefficients increase `P(malignant)`.
+
+![Train and test ROC curves with fitted logistic-regression coefficients](assets/model_performance.png)
+
+#### LASSO feature selection
+
+Panel A shows the regularisation paths, and Panel B shows the five-fold cross-validation AUC used by the lambda-1SE selection rule.
+
+![LASSO regularisation paths and cross-validation AUC](assets/model_feature_selection.png)
+
+#### Functional-form diagnostics
+
+Empirical training-set log-odds are shown for each retained predictor. The spline-versus-linear likelihood-ratio tests flag `worst texture` and `worst concavity` as non-linear at `alpha = 0.10`.
+
+![Log-odds functional-form diagnostics for retained predictors](assets/model_linearity_diagnostics.png)
+
+#### Collinearity diagnostics
+
+Variance inflation factors are shown for the seven retained predictors, with reference lines at VIF 5 and VIF 10.
+
+![Variance inflation factors for retained predictors](assets/model_vif_diagnostics.png)
+
 ## Run locally
 
 Python 3.11 or newer is recommended.
@@ -190,6 +218,7 @@ The application code does not persist prediction form values or uploaded CSV con
 |-- app.py                 # Minimal Shiny entry point
 |-- breast_cancer_app.py   # Model loading, UI, server, plots, and analytics
 |-- bc_bundle.pkl          # Precomputed model and evaluation bundle
+|-- assets/                # Model evaluation figures used in this README
 |-- requirements.txt       # Runtime dependencies
 |-- deploy.py              # shinyapps.io deployment helper
 |-- Dockerfile             # Container definition
