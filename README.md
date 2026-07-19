@@ -103,11 +103,11 @@ The test-set confusion matrix contains 41 true positives, 67 true negatives, 5 f
 
 The figures below are rendered from the checked-in `bc_bundle.pkl`, so they correspond to the same fixed train/test split and fitted model reported above.
 
-#### Discrimination and fitted coefficients
+#### Discrimination, calibration, and fitted coefficients
 
-Panel A compares the train and held-out test ROC curves. Panel B shows the fitted logistic-regression coefficients after robust scaling; positive coefficients increase `P(benign)`, whereas negative coefficients increase `P(malignant)`.
+Panel A compares the train and held-out test ROC curves. Panel B shows train/test calibration and Brier scores. Panel C shows the fitted logistic-regression coefficients after robust scaling; positive coefficients increase `P(benign)`, whereas negative coefficients increase `P(malignant)`.
 
-![Train and test ROC curves with fitted logistic-regression coefficients](assets/model_performance.png)
+![Train and test ROC curves, calibration, and fitted logistic-regression coefficients](assets/model_performance.png)
 
 #### LASSO feature selection
 
