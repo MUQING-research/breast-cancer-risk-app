@@ -489,10 +489,10 @@ def _autoscale(fig, scale=0.65, target_w=7.0):
 def _make_feat_sel_fig():
     """A: LASSO regularisation path · B: 5-fold CV AUC"""
     fig  = plt.figure(figsize=(7.0, 3.5))
-    gs   = fig.add_gridspec(1, 5, wspace=0.42)
+    gs   = fig.add_gridspec(1, 2, wspace=0.34)
 
     # ── A: LASSO regularisation path ────────────────────────────────────────
-    ax_p = fig.add_subplot(gs[0, 0:3])
+    ax_p = fig.add_subplot(gs[0, 0])
     _style_axis(ax_p)
     for fi in range(len(FEAT_NAMES)):
         if fi not in SEL_IDX:
@@ -501,30 +501,41 @@ def _make_feat_sel_fig():
     for k, fi in enumerate(SEL_IDX):
         ax_p.plot(LOG_C, PATH_COEFS[:, fi], color=CELL_COLORS[k % len(CELL_COLORS)],
                   lw=1.0, alpha=0.90, zorder=2, label=FEAT_NAMES[fi])
-    ax_p.axvline(np.log10(C_MIN), color=_MUTED, lw=0.8, ls="--", zorder=3,
-                 label=f"lambda_min ({NZ_MIN})")
-    ax_p.axvline(np.log10(C_1SE), color=CLR_1SE, lw=0.8, ls=":", zorder=3,
-                 label=f"lambda_1se ({N_SEL})")
+    ax_p.axvline(np.log10(C_MIN), color=_MUTED, lw=0.8, ls="--", zorder=3)
+    ax_p.axvline(np.log10(C_1SE), color=CLR_1SE, lw=0.8, ls=":", zorder=3)
     ax_p.axhline(0, color=_EDGE, lw=0.8, alpha=0.35, zorder=0)
     ax_p.set_xlabel(r"$\log_{10}(C)$")
     ax_p.set_ylabel("Coefficient")
     ax_p.set_xlim(LOG_C.min(), LOG_C.max())
     _P(ax_p, "A")
-    leg = ax_p.legend(loc="lower right", ncol=2, handlelength=1.1,
-                       title=f"n = {N_SEL} selected",
-                       fontsize=8.0, title_fontsize=8.0)
+    leg = ax_p.legend(
+        loc="upper left",
+        bbox_to_anchor=(0.02, 0.98),
+        ncol=2,
+        handlelength=1.0,
+        columnspacing=0.7,
+        labelspacing=0.18,
+        borderaxespad=0.0,
+        frameon=True,
+        facecolor="white",
+        edgecolor=_EDGE,
+        framealpha=0.90,
+        title=f"n = {N_SEL} selected",
+        fontsize=5.8,
+        title_fontsize=6.2,
+    )
     leg.get_title().set_fontweight("bold")
 
     # ── B: 5-fold CV AUC ────────────────────────────────────────────────────
-    ax_cv = fig.add_subplot(gs[0, 3:5])
+    ax_cv = fig.add_subplot(gs[0, 1])
     _style_axis(ax_cv)
     ax_cv.fill_between(np.log10(CS), MEAN_AUC - SE_AUC, MEAN_AUC + SE_AUC,
                        color=CLR_TRAIN, alpha=0.13)
     ax_cv.plot(np.log10(CS), MEAN_AUC, color=CLR_TRAIN, lw=1.0)
     ax_cv.axvline(np.log10(C_MIN), color=_MUTED, lw=0.8, ls="--",
-                  label=f"lambda_min ({NZ_MIN})")
+                  label=fr"$\lambda_{{min}}$ ({NZ_MIN})")
     ax_cv.axvline(np.log10(C_1SE), color=CLR_1SE, lw=0.8, ls=":",
-                  label=f"lambda_1se ({N_SEL})")
+                  label=fr"$\lambda_{{1SE}}$ ({N_SEL})")
     ax_cv.axhline(THR_1SE, color=CLR_1SE, lw=0.8, ls="--", alpha=0.45)
     ax_cv.set_xlabel(r"$\log_{10}(C)$")
     ax_cv.set_ylabel("5-fold CV AUC")

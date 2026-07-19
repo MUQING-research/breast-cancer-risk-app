@@ -7,6 +7,10 @@ An interactive [Shiny for Python](https://shiny.posit.co/py/) dashboard for tran
 > [!WARNING]
 > This project is intended for research, education, and software demonstration only. It is not a medical device, has not been externally validated, and must not be used to diagnose patients or guide treatment.
 
+## Application preview
+
+![Breast cancer diagnosis dashboard](assets/breast_cancer_app.png)
+
 ## Overview
 
 The application uses the [Wisconsin Diagnostic Breast Cancer dataset](https://archive.ics.uci.edu/dataset/17/breast-cancer-wisconsin-diagnostic), distributed through `sklearn.datasets.load_breast_cancer`. The dataset contains 569 samples and 30 continuous measurements derived from digitized fine-needle aspirate images of breast masses.
@@ -218,7 +222,7 @@ The application code does not persist prediction form values or uploaded CSV con
 |-- app.py                 # Minimal Shiny entry point
 |-- breast_cancer_app.py   # Model loading, UI, server, plots, and analytics
 |-- bc_bundle.pkl          # Precomputed model and evaluation bundle
-|-- assets/                # Model evaluation figures used in this README
+|-- assets/                # Application screenshot and model figures used in this README
 |-- requirements.txt       # Runtime dependencies
 |-- deploy.py              # shinyapps.io deployment helper
 |-- Dockerfile             # Container definition
