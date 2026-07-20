@@ -105,7 +105,7 @@ The test-set confusion matrix contains 41 true positives, 67 true negatives, 5 f
 
 ### Model evaluation figures
 
-The figures below are rendered from the checked-in `bc_bundle.pkl`, so they correspond to the same fixed train/test split and fitted model reported above.
+The figures below are rendered from the checked-in `bc_bundle.pkl`, so they correspond to the same fixed train/test split and fitted model reported above. They use the shared Cell red/blue/teal palette with navy typography and can be regenerated with `python generate_readme_figures.py`.
 
 #### Discrimination, calibration, and fitted coefficients
 
@@ -222,6 +222,7 @@ The application code does not persist prediction form values or uploaded CSV con
 |-- app.py                 # Minimal Shiny entry point
 |-- breast_cancer_app.py   # Model loading, UI, server, plots, and analytics
 |-- bc_bundle.pkl          # Precomputed model and evaluation bundle
+|-- generate_readme_figures.py  # Reproducible README figure generator
 |-- assets/                # Application screenshot and model figures used in this README
 |-- requirements.txt       # Runtime dependencies
 |-- deploy.py              # shinyapps.io deployment helper
