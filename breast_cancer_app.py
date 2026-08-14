@@ -1,11 +1,11 @@
-﻿"""
+"""
 breast_cancer_app.py — Breast Cancer Classification
 Two-stage pipeline: (1) LASSO (λ1se, 5-fold CV) ; (2) Plain Logistic Regression
 Wisconsin Breast Cancer Dataset (sklearn) · N=569 · 30 features
 Cell Press visual style · Research & educational use only
 """
 from __future__ import annotations
-import io, pickle, warnings, threading, os, tempfile
+import base64, io, pickle, warnings, threading, os, tempfile, time
 from collections import Counter
 import requests
 import matplotlib; matplotlib.use("Agg")
@@ -56,9 +56,11 @@ if os.name == "nt":
     tempfile.TemporaryDirectory = _SafeTemporaryDirectory
 
 # ── Palette ───────────────────────────────────────────────────────────────────
+# Purple-coordinated figure palette (harmonised with the page theme):
+# rose/cyan/emerald/indigo/pink · slate/lavender · red/amber/plum
 CELL_COLORS = [
-    "#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F",
-    "#8491B4", "#91D1C2", "#DC0000", "#7E6148", "#B09C85",
+    "#E11D48", "#06B6D4", "#10B981", "#4F46E5", "#EC4899",
+    "#94A3B8", "#A78BFA", "#DC2626", "#F59E0B", "#9333EA",
 ]
 CLR_MAL   = CELL_COLORS[0]
 CLR_BEN   = CELL_COLORS[1]
@@ -67,17 +69,23 @@ CLR_TEST  = CELL_COLORS[4]
 CLR_1SE   = CELL_COLORS[7]
 CLR_MIN   = CELL_COLORS[8]
 CLR_REF   = CELL_COLORS[5]
-_MUTED    = CELL_COLORS[8]
-_NAVY     = CELL_COLORS[3]
-_ORANGE   = CELL_COLORS[4]
-_EDGE     = CELL_COLORS[5]
-_FAINT    = CELL_COLORS[6]
+_MUTED    = "#64748B"
+_NAVY     = "#4F46E5"
+_ORANGE   = "#F59E0B"
+_EDGE     = "#94A3B8"
+_FAINT    = "#A78BFA"
+_INK_BC   = "#111111"   # reference rules / misc ink
+_AXIS_BC  = "#334155"   # axis spines
+_TICK_BC  = "#475569"   # tick marks / tick labels
+_LABEL_BC = "#1E293B"   # axis labels
+_GRID_BC  = "#EDE9FE"   # subtle lavender gridlines
+_PANEL_BC = "#7C3AED"   # violet panel letters (A, B, ...)
 
 plt.rcParams.update({
     "font.family":         "Arial",
     "font.sans-serif":     ["Arial", "Helvetica", "Liberation Sans", "DejaVu Sans", "sans-serif"],
-    "font.size":           9.0,
-    "axes.titlesize":      10.0,
+    "font.size":           8.0,
+    "axes.titlesize":      9.0,
     "axes.titleweight":    "bold",
     "axes.linewidth":      0.8,
     "axes.spines.top":     True,
@@ -85,20 +93,20 @@ plt.rcParams.update({
     "axes.grid":           False,
     "xtick.direction":     "out",
     "ytick.direction":     "out",
-    "xtick.major.size":    3.0,
-    "ytick.major.size":    3.0,
-    "xtick.major.width":   0.8,
-    "ytick.major.width":   0.8,
-    "xtick.labelsize":     8.0,
-    "ytick.labelsize":     8.0,
-    "axes.labelsize":      9.0,
+    "xtick.major.size":    2.6,
+    "ytick.major.size":    2.6,
+    "xtick.major.width":   0.7,
+    "ytick.major.width":   0.7,
+    "xtick.labelsize":     7.5,
+    "ytick.labelsize":     7.5,
+    "axes.labelsize":      8.5,
     "axes.labelpad":       3,
     "lines.linewidth":     1.0,
-    "lines.markersize":    3.6,
-    "legend.fontsize":     8.0,
+    "lines.markersize":    3.2,
+    "legend.fontsize":     7.5,
     "legend.frameon":      False,
     "legend.framealpha":   0.9,
-    "legend.edgecolor":    _EDGE,
+    "legend.edgecolor":    _INK_BC,
     "legend.borderpad":    0.35,
     "legend.labelspacing": 0.22,
     "figure.facecolor":    "white",
@@ -448,32 +456,40 @@ def _sid(feat: str) -> str:
     return "f_" + feat.replace(" ", "_")
 
 
-def _fig_buf(fig) -> bytes:
+def _fig_buf(fig) -> str:
+    """Save a matplotlib figure to an embedded PNG data URI (no temp files)."""
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
-    return buf.read()
+    return "data:image/png;base64," + base64.b64encode(buf.read()).decode("ascii")
 
 
-def _P(ax, letter, fs=10.0):
-    """Cell-style panel label: bold letter above top-left via set_title."""
+def _P(ax, letter, fs=10.5):
+    """Journal-style panel label: bold violet letter above top-left."""
     ax.set_title(letter, fontsize=fs, fontweight="bold",
-                 loc="left", pad=3, color=_NAVY)
+                 loc="left", pad=3, color=_PANEL_BC)
 
 
 def _style_axis(ax):
-    """Apply closed-box Cell-style axes to one matplotlib axis."""
+    """Apply closed-box journal-style axes to one matplotlib axis."""
     ax.grid(False)
-    ax.tick_params(direction="out", length=3.0, width=0.8, colors=_NAVY, labelsize=8.0)
-    ax.xaxis.label.set_color(_NAVY)
-    ax.yaxis.label.set_color(_NAVY)
-    ax.xaxis.label.set_size(9.0)
-    ax.yaxis.label.set_size(9.0)
+    ax.tick_params(direction="out", length=2.6, width=0.7, colors=_TICK_BC,
+                   labelsize=7.5)
+    ax.xaxis.label.set_color(_LABEL_BC)
+    ax.yaxis.label.set_color(_LABEL_BC)
+    ax.xaxis.label.set_size(8.5)
+    ax.yaxis.label.set_size(8.5)
     for sp in ("top", "right", "bottom", "left"):
         ax.spines[sp].set_visible(True)
-        ax.spines[sp].set_color(_EDGE)
+        ax.spines[sp].set_color(_AXIS_BC)
         ax.spines[sp].set_linewidth(0.8)
+
+
+def _grid_light(ax):
+    """Subtle horizontal gridlines behind data — modern journal-panel look."""
+    ax.grid(True, axis="y", color=_GRID_BC, linewidth=0.7, zorder=0)
+    ax.set_axisbelow(True)
 
 
 def _autoscale(fig, scale=0.65, target_w=7.0):
@@ -488,12 +504,13 @@ def _autoscale(fig, scale=0.65, target_w=7.0):
 
 def _make_feat_sel_fig():
     """A: LASSO regularisation path · B: 5-fold CV AUC"""
-    fig  = plt.figure(figsize=(7.0, 3.5))
+    fig  = plt.figure(figsize=(4.75, 2.28))
     gs   = fig.add_gridspec(1, 2, wspace=0.34)
 
     # ── A: LASSO regularisation path ────────────────────────────────────────
     ax_p = fig.add_subplot(gs[0, 0])
     _style_axis(ax_p)
+    _grid_light(ax_p)
     for fi in range(len(FEAT_NAMES)):
         if fi not in SEL_IDX:
             ax_p.plot(LOG_C, PATH_COEFS[:, fi], color=_EDGE,
@@ -518,7 +535,7 @@ def _make_feat_sel_fig():
         borderaxespad=0.0,
         frameon=True,
         facecolor="white",
-        edgecolor=_EDGE,
+        edgecolor=_INK_BC,
         framealpha=0.90,
         title=f"n = {N_SEL} selected",
         fontsize=5.8,
@@ -529,6 +546,7 @@ def _make_feat_sel_fig():
     # ── B: 5-fold CV AUC ────────────────────────────────────────────────────
     ax_cv = fig.add_subplot(gs[0, 1])
     _style_axis(ax_cv)
+    _grid_light(ax_cv)
     ax_cv.fill_between(np.log10(CS), MEAN_AUC - SE_AUC, MEAN_AUC + SE_AUC,
                        color=CLR_TRAIN, alpha=0.13)
     ax_cv.plot(np.log10(CS), MEAN_AUC, color=CLR_TRAIN, lw=1.0)
@@ -541,7 +559,7 @@ def _make_feat_sel_fig():
     ax_cv.set_ylabel("5-fold CV AUC")
     ax_cv.yaxis.set_major_formatter(plt.FormatStrFormatter("%.3f"))
     _P(ax_cv, "B")
-    ax_cv.legend(loc="lower left", fontsize=8.0)
+    ax_cv.legend(loc="lower left", fontsize=7.5)
 
     fig.tight_layout(pad=0.8)
     return _autoscale(fig)
@@ -549,12 +567,13 @@ def _make_feat_sel_fig():
 
 def _make_perf_fig():
     """A: ROC curve · B: LR coefficients"""
-    fig = plt.figure(figsize=(7.0, 3.5))
+    fig = plt.figure(figsize=(4.75, 2.28))
     gs  = fig.add_gridspec(1, 2, wspace=0.34)
 
     # ── A: ROC curves ───────────────────────────────────────────────────────
     ax_roc = fig.add_subplot(gs[0, 0])
     _style_axis(ax_roc)
+    _grid_light(ax_roc)
     ax_roc.plot([0, 1], [0, 1], color=_EDGE, lw=0.8, ls="--", alpha=0.65, zorder=1)
     ax_roc.plot(FPR_TR, TPR_TR, color=CLR_TRAIN, lw=1.0, alpha=0.9,
                 label=f"Train  AUC={AUC_TRAIN:.3f}", zorder=2)
@@ -564,7 +583,7 @@ def _make_perf_fig():
     ax_roc.set_ylabel("Sensitivity")
     ax_roc.set_xlim(-0.01, 1.01); ax_roc.set_ylim(-0.01, 1.01)
     _P(ax_roc, "A")
-    ax_roc.legend(loc="lower right", fontsize=8.0)
+    ax_roc.legend(loc="lower right", fontsize=7.5)
 
     # ── B: LR coefficients ──────────────────────────────────────────────────
     ax_coef = fig.add_subplot(gs[0, 1])
@@ -577,13 +596,13 @@ def _make_perf_fig():
                  edgecolor="none", height=0.58)
     ax_coef.axvline(0, color=_EDGE, lw=0.8, alpha=0.65)
     ax_coef.set_yticks(range(len(_fo)))
-    ax_coef.set_yticklabels(_fo, fontsize=8.0)
+    ax_coef.set_yticklabels(_fo, fontsize=7.5)
     ax_coef.set_xlabel("LR Coefficient")
     _P(ax_coef, "B")
     ax_coef.legend(
         handles=[Patch(facecolor=CLR_BEN, alpha=0.78, label="↑ Benign"),
                  Patch(facecolor=CLR_MAL, alpha=0.78, label="↑ Malignant")],
-        loc="lower right", fontsize=8.0)
+        loc="lower right", fontsize=7.5)
 
     fig.tight_layout(pad=0.6)
     return _autoscale(fig)
@@ -593,13 +612,14 @@ def _make_linearity_fig():
     """A–G: log-odds linearity check (LRT) for each selected feature"""
     n_cols = 4 if len(SEL_COLS) > 4 else max(1, len(SEL_COLS))
     n_rows = int(np.ceil(len(SEL_COLS) / n_cols))
-    fig = plt.figure(figsize=(7.0, 2.2 * n_rows))
+    fig = plt.figure(figsize=(5.2, 1.275 * n_rows))
     gs  = fig.add_gridspec(n_rows, n_cols, wspace=0.42, hspace=0.58)
 
     for k, feat in enumerate(SEL_COLS):
         r, c = divmod(k, n_cols)
         ax   = fig.add_subplot(gs[r, c])
         _style_axis(ax)
+        _grid_light(ax)
         mids   = LRT_PLOT_DATA[feat]["mids"]
         logits = LRT_PLOT_DATA[feat]["logits"]
         ax.scatter(mids, logits, color=CLR_TRAIN, s=22, zorder=3,
@@ -613,7 +633,7 @@ def _make_linearity_fig():
         t_col  = _NAVY if linear else CLR_1SE
         verdict = "linear" if linear else "non-linear"
         ax.text(0.97, 0.97, f"p={r_lrt['p']:.3f}  {verdict}",
-                transform=ax.transAxes, fontsize=7.2, va="top", ha="right",
+                transform=ax.transAxes, fontsize=6.8, va="top", ha="right",
                 color=t_col, style="italic",
                 bbox=dict(facecolor="white", edgecolor="none",
                            alpha=0.75, pad=0.5))
@@ -634,7 +654,7 @@ def _make_vif_fig():
     vif_vals   = [VIF[f] for f in SEL_COLS]
     vif_colors = [CLR_1SE if v > 10 else (_ORANGE if v > 5 else CLR_BEN)
                   for v in vif_vals]
-    fig, ax = plt.subplots(figsize=(7.0, 3.5))
+    fig, ax = plt.subplots(figsize=(4.75, 2.28))
     _style_axis(ax)
     ax.barh(range(len(SEL_COLS)), vif_vals, color=vif_colors,
             alpha=0.78, edgecolor="none", height=0.52)
@@ -643,24 +663,24 @@ def _make_vif_fig():
     ax.axvline(10.0, color=CLR_1SE, lw=0.8, ls="--", alpha=0.8,
                label="VIF=10  (severe)")
     ax.set_yticks(range(len(SEL_COLS)))
-    ax.set_yticklabels(SEL_COLS, fontsize=8.0)
+    ax.set_yticklabels(SEL_COLS, fontsize=7.5)
     ax.set_xlabel("Variance Inflation Factor")
     _P(ax, "A")
-    ax.legend(loc="lower right", fontsize=8.0)
+    ax.legend(loc="lower right", fontsize=7.5)
     _vmax = max(vif_vals) if vif_vals else 1.0
     ax.set_xlim(0, _vmax * 1.22)
     for i, v in enumerate(vif_vals):
         ax.text(v + _vmax * 0.012, i, f"{v:.2f}", va="center",
-                fontsize=8.0, color=_NAVY)
+                fontsize=7.5, color=_NAVY)
     fig.tight_layout(pad=0.6)
     return _autoscale(fig)
 
 
-# Pre-render static figures
-_FEAT_SEL_BYTES = _fig_buf(_make_feat_sel_fig())
-_PERF_BYTES     = _fig_buf(_make_perf_fig())
-_LIN_BYTES      = _fig_buf(_make_linearity_fig())
-_VIF_BYTES      = _fig_buf(_make_vif_fig())
+# Pre-render static figures once per process and embed as data URIs
+_FEAT_SEL_SRC = _fig_buf(_make_feat_sel_fig())
+_PERF_SRC     = _fig_buf(_make_perf_fig())
+_LIN_SRC      = _fig_buf(_make_linearity_fig())
+_VIF_SRC      = _fig_buf(_make_vif_fig())
 print("  Static figures rendered.", flush=True)
 
 
@@ -748,13 +768,19 @@ def _sb_headers():
     }
 
 
+# One shared session per process: connection pooling + shorter TLS handshakes
+# for the (otherwise) many small analytics requests.
+_HTTP_SESSION = requests.Session()
+_HTTP_SESSION.headers.update({"User-Agent": _APP_NAME_BC})
+
+
 def _log_visit_bc(country, city, lat, lon):
     if not (_SUPABASE_URL and _SUPABASE_KEY):
         return
     if lat is None or lon is None:
         return
     try:
-        requests.post(
+        _HTTP_SESSION.post(
             f"{_SUPABASE_URL}/rest/v1/visits",
             headers=_sb_headers(),
             json={"app_name": _APP_NAME_BC, "country": country,
@@ -770,7 +796,7 @@ def _delete_null_visits_bc():
         return
     try:
         hdrs = {k: v for k, v in _sb_headers().items() if k != "Prefer"}
-        requests.delete(
+        _HTTP_SESSION.delete(
             f"{_SUPABASE_URL}/rest/v1/visits",
             headers=hdrs,
             params={"app_name": f"eq.{_APP_NAME_BC}", "lat": "is.null"},
@@ -786,7 +812,7 @@ def _fetch_visits_bc():
         return []
     try:
         hdrs = {k: v for k, v in _sb_headers().items() if k != "Prefer"}
-        r = requests.get(
+        r = _HTTP_SESSION.get(
             f"{_SUPABASE_URL}/rest/v1/visits",
             headers=hdrs,
             params={"app_name": f"eq.{_APP_NAME_BC}",
@@ -806,6 +832,7 @@ def _fetch_visits_bc():
 
 _WORLD_GEO_PATH_BC = Path(__file__).parent / "world.geojson"
 _WORLD_GEO_BC = None
+_WORLD_PATCHES_BC = None
 
 
 def _load_world_geo_bc():
@@ -816,14 +843,40 @@ def _load_world_geo_bc():
     return _WORLD_GEO_BC
 
 
+def _world_patches_bc():
+    """World-outline matplotlib Polygons, parsed once per process."""
+    global _WORLD_PATCHES_BC
+    if _WORLD_PATCHES_BC is not None:
+        return _WORLD_PATCHES_BC
+    from matplotlib.patches import Polygon
+
+    geo = _load_world_geo_bc()
+    patches = []
+    if geo:
+        for feat in geo.get("features", []):
+            geom = feat.get("geometry") or {}
+            gtype = geom.get("type", "")
+            coords = geom.get("coordinates", [])
+            try:
+                if gtype == "Polygon":
+                    pts = np.array(coords[0])[:, :2]
+                    patches.append(Polygon(pts, closed=True))
+                elif gtype == "MultiPolygon":
+                    for poly in coords:
+                        pts = np.array(poly[0])[:, :2]
+                        patches.append(Polygon(pts, closed=True))
+            except Exception:
+                pass
+    _WORLD_PATCHES_BC = patches
+    return patches
+
+
 threading.Thread(target=_delete_null_visits_bc, daemon=True).start()
 
 
-def _make_visit_map_bc(user_lat=None, user_lon=None):
-    from matplotlib.patches import Polygon
+def _make_visit_map_bc(visits, user_lat=None, user_lon=None):
     from matplotlib.collections import PatchCollection
 
-    visits = _fetch_visits_bc()
     valid  = [v for v in visits if v.get("lat") is not None and v.get("lon") is not None]
     lats = [v["lat"] for v in valid]
     lons = [v["lon"] for v in valid]
@@ -842,35 +895,19 @@ def _make_visit_map_bc(user_lat=None, user_lon=None):
             seen_cities.add(city)
             city_labels.append((v["lat"], v["lon"], city))
 
-    fig, ax = plt.subplots(figsize=(7.0, 3.5), facecolor="white")
+    fig, ax = plt.subplots(figsize=(6.6, 3.15), facecolor="white")
     ax.set_facecolor("white")
     ax.set_xlim(-180, 180)
     ax.set_ylim(-70, 85)
     _style_axis(ax)
 
-    geo = _load_world_geo_bc()
-    if geo:
-        patches = []
-        for feat in geo.get("features", []):
-            geom = feat.get("geometry") or {}
-            gtype = geom.get("type", "")
-            coords = geom.get("coordinates", [])
-            try:
-                if gtype == "Polygon":
-                    pts = np.array(coords[0])[:, :2]
-                    patches.append(Polygon(pts, closed=True))
-                elif gtype == "MultiPolygon":
-                    for poly in coords:
-                        pts = np.array(poly[0])[:, :2]
-                        patches.append(Polygon(pts, closed=True))
-            except Exception:
-                pass
-        if patches:
-            pc = PatchCollection(
-                patches, facecolor=_FAINT, edgecolor=_EDGE,
-                linewidth=0.4, alpha=0.35, zorder=1,
-            )
-            ax.add_collection(pc)
+    patches = _world_patches_bc()
+    if patches:
+        pc = PatchCollection(
+            patches, facecolor=_FAINT, edgecolor=_EDGE,
+            linewidth=0.4, alpha=0.35, zorder=1,
+        )
+        ax.add_collection(pc)
 
     if lons:
         ax.scatter(lons, lats, s=28, color=CLR_BEN, alpha=0.8,
@@ -897,7 +934,7 @@ def _make_visit_map_bc(user_lat=None, user_lon=None):
     ax.set_yticks([])
 
     if lons or user_lat is not None:
-        ax.legend(fontsize=8.0, loc="lower left", frameon=False)
+        ax.legend(fontsize=7.5, loc="lower left", frameon=False)
 
     fig.tight_layout(pad=0.6)
     return fig
@@ -905,120 +942,147 @@ def _make_visit_map_bc(user_lat=None, user_lon=None):
 
 # ── 4. CSS ───────────────────────────────────────────────────────────────────
 _CSS = """
+
 :root{
-  --red:#E64B35;--blue:#4DBBD5;--teal:#00A087;--navy:#3C5488;--salmon:#F39B7F;
-  --lav:#8491B4;--mint:#91D1C2;--crimson:#DC0000;--brown:#7E6148;--tan:#B09C85;
-  --ink:var(--navy);--accent:var(--blue);--accent-2:var(--teal);--surface:#FFFFFF;
-  --panel:#F7FBFD;--line:rgba(60,84,136,.16);--line-strong:rgba(60,84,136,.28);
-  --muted:rgba(60,84,136,.78);--shadow-sm:0 10px 28px rgba(60,84,136,.08);
-  --shadow-lg:0 24px 60px rgba(60,84,136,.12);--r:18px;--rs:12px;
-  --font:'Arial','Helvetica','Liberation Sans','DejaVu Sans',sans-serif;
+  --red:#E11D48;--blue:#06B6D4;--teal:#A855F7;--navy:#7C3AED;--salmon:#EC4899;
+  --lav:#A78BFA;--mint:#A78BFA;--crimson:#DC2626;--brown:#64748B;--tan:#F59E0B;
+  --ink:#1E293B;--muted:#64748B;--surface:#FFFFFF;--bg:#FFFFFF;
+  --line:#E2E8F0;--line-strong:#CBD5E1;
+  --accent:#7C3AED;--accent-dark:#6D28D9;
+  --r:8px;--rs:6px;
+  --font:'Arial','Helvetica Neue',Helvetica,'Liberation Sans','DejaVu Sans',sans-serif;
+  --serif:'Arial','Helvetica Neue',Helvetica,'Liberation Sans',sans-serif;
 }
 html,body{
   height:100%;
   font-family:var(--font);
   font-size:15px;
   font-variant-numeric:tabular-nums;
-  background:#F7FBFD;
+  background:var(--bg);
   color:var(--ink);
   -webkit-font-smoothing:antialiased;
 }
+/* Masthead — journal style: white bar, hairline, purple rule */
 .navbar{
-  background:rgba(255,255,255,.96)!important;
-  border-bottom:1px solid var(--line)!important;
-  padding:.88rem 1.8rem;
-  box-shadow:var(--shadow-sm);
-  backdrop-filter:blur(14px);
-  position:relative;
+  background:linear-gradient(90deg,#6D28D9,#7C3AED 60%,#9333EA)!important;
+  border-bottom:none!important;
+  box-shadow:0 4px 14px rgba(109,40,217,.25)!important;
+  padding:.9rem 1.5rem;
 }
-.navbar::after{
+.navbar::after{display:none;}
+.navbar-brand{
+  color:#FFFFFF!important;
+  font-weight:800;
+  font-size:1.05rem;
+  letter-spacing:.2px;
+}
+.navbar-brand::before{
   content:"";
-  position:absolute;
-  left:0;right:0;bottom:-1px;height:4px;
-  background:var(--accent);
+  display:inline-block;
+  width:10px;height:10px;
+  background:#FFFFFF;
+  border-radius:2px;
+  margin-right:.6rem;
 }
-.navbar-brand{color:var(--ink)!important;font-weight:800;font-size:1.02rem;letter-spacing:.18px;}
+/* Sidebar */
 .bslib-sidebar-layout>.sidebar{
-  background:rgba(255,255,255,.95)!important;
+  background:#FBF9FF!important;
   border-right:1px solid var(--line)!important;
-  box-shadow:var(--shadow-sm);
+  box-shadow:none!important;
   overflow-y:auto;
   height:100%;
-  padding:1.1rem 1.2rem 1.5rem;
+  padding:1.15rem 1.25rem 1.6rem;
 }
 .sec{
-  font-size:.74rem;
+  font-size:.68rem;
   font-weight:800;
-  color:var(--ink);
+  color:#5B21B6;
   text-transform:uppercase;
-  letter-spacing:1.6px;
-  margin:1.4rem 0 .8rem;
-  padding:0 0 .35rem .8rem;
-  border-left:5px solid var(--accent-2);
+  letter-spacing:1.8px;
+  margin:1.3rem 0 .75rem;
+  padding:0 0 .3rem .7rem;
+  border-left:3px solid var(--accent);
   line-height:1.35;
 }
-.sec:first-child{margin-top:.25rem;}
-.form-label{font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:.42rem;display:block;}
+.sec:first-child{margin-top:.2rem;}
+/* Forms */
+.form-label{font-size:.88rem;font-weight:700;color:#5B21B6;margin-bottom:.42rem;display:block;}
 .form-control,.form-select{
   font-size:.86rem;
-  border:1px solid rgba(60,84,136,.18);
+  border:1px solid var(--line-strong);
   border-radius:var(--rs);
   background:var(--surface);
   padding:.7rem .86rem;
   min-height:2.95rem;
   color:var(--ink);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
-  transition:border-color .16s,box-shadow .16s,background .16s,transform .16s;
+  box-shadow:none;
+  transition:border-color .16s,box-shadow .16s;
 }
 .form-control:focus,.form-select:focus{
   border-color:var(--accent);
   background:white;
-  box-shadow:0 0 0 4px rgba(77,187,213,.18);
+  box-shadow:0 0 0 3px rgba(124,58,237,.15);
   outline:none;
 }
+/* Buttons — flat, journal-adjacent */
 .btn-primary{
   background:var(--accent)!important;
   border:none!important;
-  border-radius:14px!important;
-  font-size:.88rem!important;
-  font-weight:700!important;
-  letter-spacing:.1px;
-  padding:.84rem 1rem!important;
-  box-shadow:0 12px 24px rgba(60,84,136,.16);
+  border-radius:var(--rs)!important;
+  color:#FFFFFF!important;
+  font-size:.78rem!important;
+  font-weight:800!important;
+  letter-spacing:.9px;
+  text-transform:uppercase;
+  padding:.8rem 1rem!important;
+  box-shadow:none!important;
 }
-.btn-primary:hover{transform:translateY(-1px);}
-.btn-sm{font-size:.92rem!important;padding:.68rem 1rem!important;}
+.btn-primary:hover{background:var(--accent-dark)!important;transform:none!important;}
+.btn-sm{font-size:.78rem!important;padding:.65rem .95rem!important;}
+/* Ion range slider */
 .irs{height:44px;}.irs-with-grid{height:60px;}
-.irs-line{height:6px!important;background:rgba(132,145,180,.22)!important;border:none!important;border-radius:999px;top:28px;}
+.irs-line{height:6px!important;background:var(--line)!important;border:none!important;border-radius:999px;top:28px;}
 .irs-bar,.irs-bar-edge{height:6px!important;background:var(--accent)!important;border:none!important;top:28px;}
 .irs-bar-edge{width:6px!important;}
 .irs-handle{
   width:18px!important;height:18px!important;background:white!important;
   border:3px solid var(--accent)!important;border-radius:50%!important;top:22px!important;
-  box-shadow:0 4px 12px rgba(77,187,213,.28)!important;cursor:grab;
+  box-shadow:none!important;cursor:grab;
 }
-.irs-handle:hover,.irs-handle.state_hover{transform:scale(1.16)!important;}
-.irs-single{background:var(--ink)!important;color:white;font-size:.78rem;font-weight:700;padding:4px 9px;border-radius:999px;}
-.irs-single::before{border-top-color:var(--ink)!important;}
+.irs-handle:hover,.irs-handle.state_hover{transform:scale(1.1)!important;}
+.irs-single{background:#5B21B6!important;color:white;font-size:.78rem;font-weight:700;padding:4px 9px;border-radius:4px;}
+.irs-single::before{border-top-color:#5B21B6!important;}
 .irs-from,.irs-to{display:none!important;}
-.irs-grid-pol{background:rgba(132,145,180,.38)!important;}
-.irs-grid-text{font-size:.72rem!important;color:rgba(60,84,136,.72)!important;}
+.irs-grid-pol{background:var(--line-strong)!important;}
+.irs-grid-text{font-size:.72rem!important;color:var(--muted)!important;}
+/* Main column */
 .bslib-sidebar-layout>.main{padding:clamp(18px,2.6vw,30px)!important;}
 .card-body{padding:clamp(14px,1.7vw,20px)!important;}
-.page-title{
-  font-size:clamp(1.55rem,1.9vw,2rem);
+/* Hero */
+.hero-copy{margin-bottom:1.1rem;}
+.hero-kicker{
+  font-size:.64rem;
   font-weight:800;
-  color:var(--ink);
+  color:var(--accent);
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:.35rem;
+}
+.page-title{
+  font-family:var(--font);
+  font-size:clamp(1.6rem,2vw,2.05rem);
+  font-weight:800;
+  color:#5B21B6;
   display:inline-block;
   margin:.15rem 0 .3rem;
-  letter-spacing:-.03em;
+  letter-spacing:0;
   position:relative;
 }
 .page-title::after{
   content:"";
   display:block;
-  height:4px;
-  width:min(100%, 22rem);
+  height:3px;
+  width:min(100%,22rem);
   background:var(--accent);
   border-radius:999px;
   margin-top:.6rem;
@@ -1030,358 +1094,284 @@ html,body{
   line-height:1.62;
   max-width:70rem;
 }
-.infobar{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:14px;
-  margin-bottom:18px;
-}
-.chip{
-  background:rgba(255,255,255,.92);
-  border:1px solid var(--line);
-  border-top:4px solid var(--accent);
-  border-radius:16px;
-  padding:.88rem 1rem;
-  display:flex;
-  flex-direction:column;
-  gap:.25rem;
-  box-shadow:var(--shadow-sm);
-}
-.chip:nth-child(2n){border-top-color:var(--teal);}
-.chip:nth-child(3n){border-top-color:var(--navy);}
-.chip:nth-child(4n){border-top-color:var(--salmon);}
-.chip-lbl{font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.9px;}
-.chip-val{font-size:1.0rem;font-weight:800;color:var(--ink);white-space:nowrap;}
+/* Cards — flat panels with hairline rules */
 .card{
-  border:1px solid var(--line)!important;
+  border:1px solid #E9D5FF!important;
   border-radius:var(--r)!important;
-  box-shadow:var(--shadow-sm)!important;
-  background:rgba(255,255,255,.93)!important;
+  box-shadow:none!important;
+  background:var(--surface)!important;
   overflow:hidden;
   margin-bottom:16px;
   position:relative;
 }
-.card::before{
-  content:"";
-  display:block;
-  height:4px;
-  background:var(--accent);
-}
+.card::before{display:none;}
 .card-header{
-  background:rgba(255,255,255,.88)!important;
-  border-bottom:1px solid rgba(60,84,136,.10)!important;
+  background:#FAF8FF!important;
+  border-bottom:1px solid #EDE9FE!important;
+  border-left:3px solid var(--accent);
+  color:#5B21B6!important;
+  font-weight:800;
+  font-size:.86rem;
+  letter-spacing:.2px;
+  padding:.8rem 1.1rem;
+}
+/* Key-result blocks — flat white, coloured values */
+.infobar{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;}
+.chip{
+  background:var(--surface);
+  border:1px solid #E9D5FF;
+  border-top:2px solid var(--accent);
+  border-radius:var(--r);
+  padding:.88rem 1rem;
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+.chip-lbl{font-size:.62rem;font-weight:800;color:#6D28D9;text-transform:uppercase;letter-spacing:1px;}
+.chip-val{font-size:1rem;font-weight:800;color:var(--ink);white-space:nowrap;}
+.summary-grid,.note-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 16px;}
+.summary-tile{
+  position:relative;
+  overflow:hidden;
+  background:var(--surface);
+  border:1px solid #E9D5FF;
+  border-top:2px solid var(--accent);
+  border-radius:var(--r);
+  padding:14px 14px 12px;
+}
+.summary-tile.accent-blue{--tile-ink:#0E7490;}
+.summary-tile.accent-teal{--tile-ink:#7E22CE;}
+.summary-tile.accent-navy{--tile-ink:#6D28D9;}
+.summary-tile.accent-salmon{--tile-ink:#BE185D;}
+.summary-tile.accent-crimson{--tile-ink:#B91C1C;}
+.summary-label{font-size:.64rem;font-weight:800;color:#6D28D9;text-transform:uppercase;letter-spacing:1px;}
+.summary-value{font-size:1.24rem;font-weight:800;color:var(--tile-ink,var(--ink));line-height:1.1;margin-top:8px;}
+.summary-detail{font-size:.78rem;color:var(--muted);line-height:1.48;margin-top:7px;}
+.section-head{display:flex;flex-direction:column;gap:4px;margin:0 0 14px;}
+.section-eyebrow{font-size:.64rem;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:1.6px;}
+.section-title{margin:0;font-size:1.08rem;font-weight:800;color:#5B21B6;}
+.section-copy{margin:0;max-width:60rem;font-size:.82rem;line-height:1.55;color:var(--muted);}
+.note-block{
+  background:var(--surface);
+  border:0;
+  border-left:3px solid var(--accent);
+  padding:9px 12px;
+}
+.note-title{font-size:.72rem;font-weight:800;color:#5B21B6;text-transform:uppercase;letter-spacing:.7px;}
+.note-copy{margin:6px 0 0;font-size:.78rem;line-height:1.5;color:var(--muted);}
+/* Tabs — flat journal section tabs */
+.nav-tabs{
+  border:0!important;
+  border-bottom:1px solid #DDD6FE!important;background:#FBF9FF!important;
+  margin-bottom:20px;
+  gap:4px;
+  flex-wrap:wrap;
+}
+.nav-tabs .nav-link{
+  color:#7E22CE!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  font-size:.78rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.6px;
+  padding:.6rem .95rem!important;
+  margin-bottom:-1px;
+  transition:color .14s,border-color .14s;
+}
+.nav-tabs .nav-link:hover{color:var(--ink)!important;background:#F5F3FF!important;transform:none!important;}
+.nav-tabs .nav-link.active{
   color:var(--ink)!important;
   font-weight:800;
-  font-size:.88rem;
-  letter-spacing:.14px;
-  padding:1rem 1.2rem;
+  background:transparent!important;
+  border-bottom:2px solid var(--accent)!important;
+  box-shadow:none!important;
 }
+/* Tables — journal rules (thick top, header hairline, no fills) */
+.tbl{width:100%;border-collapse:collapse;font-size:.82rem;}
+.tbl th{
+  text-align:left;color:#5B21B6;font-weight:800;padding:.7rem .7rem;
+  background:#FAF8FF;
+  border-top:2px solid #475569;
+  border-bottom:1px solid #475569;
+  font-size:.62rem!important;text-transform:uppercase;
+  letter-spacing:.8px;white-space:nowrap;
+}
+.tbl td{padding:.7rem .7rem;border-bottom:1px solid #F1F5F9;
+  font-variant-numeric:tabular-nums;font-size:.82rem!important;}
+.tbl td.num{text-align:right;font-weight:700;}
+.tbl tr:hover td{background:#FAF5FF;}
+/* Plot & figure frames — uniform sizing and spacing */
 .plot-frame{
   width:100%;
-  height:clamp(300px,36vw,440px);
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  height:clamp(250px,22vw,340px);
+  display:flex;align-items:center;justify-content:center;
   overflow:hidden;
+  padding:8px;
+  box-sizing:border-box;
 }
-.plot-frame.plot-map{height:clamp(260px,31vw,390px);}
-.plot-frame.plot-wide{height:clamp(320px,34vw,440px);}
+.plot-frame.plot-map{height:clamp(240px,28vw,340px);}
+.plot-frame.plot-wide{height:clamp(320px,36vw,520px);}
 .plot-frame .shiny-plot-output{width:100%!important;height:100%!important;}
 .plot-frame .shiny-plot-output img,.plot-frame .shiny-plot-output canvas{
   width:100%!important;height:100%!important;max-width:100%!important;
   max-height:100%!important;object-fit:contain!important;object-position:center center!important;
 }
-.equal-card{height:100%;display:flex;flex-direction:column;}
-.equal-card .card-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
-.plot-frame,.result-frame{flex:1 1 auto;min-height:0;}
-.result-frame{display:flex;flex-direction:column;justify-content:flex-start;}
-.result-frame.result-map{min-height:clamp(260px,31vw,390px);}
-.result-frame.result-gauge{min-height:clamp(300px,36vw,390px);}
 .figure-frame{
   width:100%;
+  height:clamp(210px,18vw,300px);
+  display:flex;align-items:center;justify-content:center;
   overflow:hidden;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:.2rem 0 .35rem;
+  padding:8px;
+  box-sizing:border-box;
 }
-.figure-frame .shiny-image-output,.figure-frame .shiny-image-output img{
-  width:100%!important;max-width:100%!important;height:auto!important;object-fit:contain!important;
+.figure-frame .shiny-html-output{
+  width:100%!important;height:100%!important;
+  display:flex;align-items:center;justify-content:center;
 }
-.nav-tabs{border:0!important;margin-bottom:18px;gap:10px;flex-wrap:wrap;}
-.nav-tabs .nav-link{
-  color:var(--muted)!important;
-  font-size:.84rem;
-  font-weight:700;
-  border:1px solid rgba(60,84,136,.14)!important;
-  padding:.68rem 1.1rem;
-  margin-bottom:0;
-  border-radius:999px;
-  background:rgba(255,255,255,.82)!important;
-  box-shadow:0 6px 18px rgba(60,84,136,.05);
-  transition:color .14s,background .14s,transform .14s,box-shadow .14s,border-color .14s;
+.figure-frame .shiny-html-output img{
+  max-width:100%!important;max-height:100%!important;
+  width:auto!important;height:auto!important;object-fit:contain!important;
+  border:1px solid #E9D5FF;
+  border-radius:4px;
 }
-.nav-tabs .nav-link:hover{
-  color:var(--ink)!important;
-  background:rgba(77,187,213,.10)!important;
-  border-color:rgba(77,187,213,.32)!important;
-  transform:translateY(-1px);
+.figure-caption{
+  font-size:.74rem;
+  color:var(--muted);
+  line-height:1.5;
+  border-top:1px solid #E9D5FF;
+  padding-top:.5rem;
+  margin:.45rem 0 0;
 }
-.nav-tabs .nav-link.active{
-  color:var(--ink)!important;
-  font-weight:800;
-  border-color:transparent!important;
-  background:rgba(77,187,213,.18)!important;
-  box-shadow:var(--shadow-sm);
-}
+.equal-card{height:100%;display:flex;flex-direction:column;}
+.equal-card .card-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+.equal-card .plot-frame{flex:0 0 auto;}
+.plot-frame,.result-frame{flex:1 1 auto;min-height:0;}
+.result-frame{display:flex;flex-direction:column;justify-content:flex-start;}
+.result-frame.result-map{min-height:clamp(240px,28vw,340px);}
+.result-frame.result-gauge{min-height:clamp(260px,26vw,360px);}
+/* Probability gauge */
 .prob-gauge{text-align:center;padding:1rem 0 .85rem;}
 .prob-num{font-size:clamp(2.3rem,3.4vw,3rem);font-weight:800;line-height:1.0;}
 .prob-label{font-size:.8rem;color:var(--muted);margin-top:.4rem;}
 .prob-bar-wrap{
-  background:rgba(132,145,180,.18);
+  background:#EDE9FE;
   border-radius:999px;
-  height:14px;
+  height:12px;
   margin:14px 22px 10px;
   overflow:hidden;
 }
 .prob-bar-fill{height:100%;border-radius:999px;transition:width .3s;}
 .class-badge{
   display:inline-block;
-  padding:.52rem 1.2rem;
-  border-radius:999px;
-  font-size:.84rem;
+  padding:.5rem 1.15rem;
+  border-radius:var(--rs);
+  font-size:.82rem;
   font-weight:800;
   letter-spacing:.2px;
   margin-top:10px;
 }
-.tbl{width:100%;border-collapse:collapse;font-size:.82rem;}
-.tbl th{
-  text-align:left;color:var(--ink);font-weight:700;padding:.72rem .7rem;
-  border-bottom:2px solid rgba(60,84,136,.12);font-size:.64rem!important;text-transform:uppercase;
-  letter-spacing:.65px;white-space:nowrap;
-}
-.tbl td{
-  padding:.72rem .7rem;border-bottom:1px solid rgba(132,145,180,.14);
-  font-variant-numeric:tabular-nums;font-size:.82rem!important;
-}
-.tbl td.num{text-align:right;font-weight:700;}
-.tbl tr:hover td{background:rgba(145,209,194,.12);}
+/* Confusion matrix — clean schematic boxes */
 .cm-wrap{
   display:grid;
-  grid-template-columns:140px 1fr 1fr;
+  grid-template-columns:130px 1fr 1fr;
   grid-template-rows:44px 1fr 1fr;
-  gap:6px;
+  gap:8px;
   margin:10px 0;
 }
 .cm-corner{background:transparent;}
 .cm-col-hdr,.cm-row-hdr{
   display:flex;align-items:center;justify-content:center;
-  font-size:.7rem;font-weight:800;color:var(--ink);
-  background:rgba(145,209,194,.18);border-radius:var(--rs);padding:0 8px;
+  font-size:.7rem;font-weight:800;color:#5B21B6;
+  background:#F5F3FF;border-radius:var(--rs);padding:0 8px;
 }
 .cm-cell{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  border-radius:var(--rs);padding:18px 10px;text-align:center;
+  border:1px solid var(--line-strong);border-radius:var(--rs);padding:18px 10px;text-align:center;
+  background:var(--surface);
 }
 .cm-cell .cm-n{font-size:1.6rem;font-weight:800;line-height:1.05;}
-.cm-cell .cm-desc{font-size:.68rem;color:rgba(60,84,136,.78);margin-top:5px;line-height:1.35;}
+.cm-cell .cm-desc{font-size:.68rem;color:var(--muted);margin-top:5px;line-height:1.35;}
+/* Rich colour layer */
+.hero-banner{
+  background:linear-gradient(120deg,#6D28D9,#7C3AED 45%,#9333EA);
+  border-radius:12px;
+  padding:22px 24px 16px;
+  margin-bottom:18px;
+}
+.hero-banner .hero-copy{margin-bottom:.9rem;}
+.hero-banner .hero-kicker{color:#DDD6FE;}
+.hero-banner .page-title{color:#FFFFFF;}
+.hero-banner .page-title::after{background:#F0ABFC;}
+.hero-banner .page-subtitle{color:rgba(255,255,255,.88);}
+.hero-banner .summary-grid{margin-bottom:0;}
+.hero-banner .summary-tile{
+  background:rgba(255,255,255,.14)!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  border-top:3px solid #F0ABFC!important;
+}
+.hero-banner .summary-label{color:rgba(255,255,255,.8);}
+.hero-banner .summary-value{color:#FFFFFF;}
+.hero-banner .summary-detail{color:rgba(255,255,255,.84);}
+.chip{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.metric-chip{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.summary-tile{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.stage-tile{background:var(--stint,#F5F3FF);border-top:3px solid var(--stage,var(--accent));}
+.summary-tile.accent-blue{--tile:#06B6D4;--tint:#ECFEFF;--tile-ink:#0E7490;}
+.summary-tile.accent-teal{--tile:#A855F7;--tint:#FAF5FF;--tile-ink:#7E22CE;}
+.summary-tile.accent-navy{--tile:#7C3AED;--tint:#F5F3FF;--tile-ink:#6D28D9;}
+.summary-tile.accent-salmon{--tile:#EC4899;--tint:#FDF2F8;--tile-ink:#BE185D;}
+.summary-tile.accent-crimson{--tile:#DC2626;--tint:#FEF2F2;--tile-ink:#B91C1C;}
+.stage-1{--stage:#06B6D4;--stint:#ECFEFF;--stage-ink:#0E7490;}
+.stage-2{--stage:#7C3AED;--stint:#F5F3FF;--stage-ink:#6D28D9;}
+.stage-3{--stage:#EC4899;--stint:#FDF2F8;--stage-ink:#BE185D;}
+.stage-4{--stage:#F59E0B;--stint:#FFFBEB;--stage-ink:#B45309;}
+.cm-cell.cm-tp,.cm-cell.cm-fn{background:#FEF2F2;border-color:#FECACA;}
+.cm-cell.cm-fp{background:#FFFBEB;border-color:#FDE68A;}
+.cm-cell.cm-tn{background:#ECFEFF;border-color:#A5F3FC;}
+.fig-no{color:#6D28D9;font-weight:800;}/* Misc */
 .disclaimer{
   color:var(--muted);
   font-size:.74rem;
   margin-top:10px;
   padding-top:10px;
-  border-top:1px solid var(--line);
+  border-top:1px solid #E9D5FF;
   text-align:center;
   line-height:1.65;
 }
 .methods h4{
-  font-size:.68rem;font-weight:800;color:var(--accent);
+  font-size:.68rem;font-weight:800;color:#5B21B6;
   text-transform:uppercase;letter-spacing:1.2px;margin:16px 0 8px;
-  padding-left:10px;border-left:4px solid var(--accent-2);
+  padding-left:10px;border-left:3px solid var(--accent);
 }
 .methods p{font-size:.82rem;line-height:1.58;margin:0 0 12px;}
 .bslib-page-fill{height:100dvh!important;}
+@media (max-width: 1100px){
+  .summary-grid,.note-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
 @media (max-width: 900px){
   html,body{font-size:14px;}
   .bslib-sidebar-layout>.sidebar{padding:1rem .95rem 1.3rem;}
   .bslib-sidebar-layout>.main{padding:14px!important;}
   .page-title{font-size:clamp(1.55rem,7vw,2rem);}
   .page-subtitle{font-size:.9rem;}
-  .plot-frame{height:clamp(250px,72vw,360px);}
-  .plot-frame.plot-map{height:clamp(220px,64vw,320px);}
-  .plot-frame.plot-wide{height:clamp(260px,74vw,360px);}
-  .result-frame.result-map{min-height:clamp(220px,64vw,320px);}
-  .result-frame.result-gauge{min-height:clamp(250px,72vw,360px);}
-  .nav-tabs .nav-link{padding:.5rem .82rem;font-size:.8rem;}
-  .cm-wrap{grid-template-columns:98px 1fr 1fr;grid-template-rows:38px 1fr 1fr;}
-}
-"""
-
-_CSS += """
-:root{--r:8px;--rs:8px;}
-.card,.chip{border-radius:8px!important;}
-.btn-primary{border-radius:8px!important;}
-.hero-copy{margin-bottom:1rem;}
-.hero-kicker{
-  font-size:.68rem;
-  font-weight:800;
-  color:var(--accent-2);
-  text-transform:uppercase;
-  letter-spacing:1.1px;
-  margin-bottom:.35rem;
-}
-.summary-grid{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:12px;
-  margin:0 0 18px;
-}
-.summary-tile{
-  position:relative;
-  overflow:hidden;
-  background:rgba(255,255,255,.9);
-  border:1px solid var(--line);
-  border-radius:8px;
-  padding:14px 14px 12px;
-  box-shadow:0 8px 22px rgba(60,84,136,.08);
-}
-.summary-tile::before{
-  content:"";
-  position:absolute;
-  left:0;
-  top:0;
-  bottom:0;
-  width:4px;
-  background:var(--tile);
-}
-.summary-tile.accent-blue{--tile:var(--blue);}
-.summary-tile.accent-teal{--tile:var(--teal);}
-.summary-tile.accent-navy{--tile:var(--navy);}
-.summary-tile.accent-salmon{--tile:var(--salmon);}
-.summary-tile.accent-crimson{--tile:var(--crimson);}
-.summary-label{
-  font-size:.66rem;
-  font-weight:800;
-  color:var(--muted);
-  text-transform:uppercase;
-  letter-spacing:.8px;
-}
-.summary-value{
-  font-size:1.24rem;
-  font-weight:800;
-  color:var(--ink);
-  line-height:1.1;
-  margin-top:8px;
-}
-.summary-detail{
-  font-size:.78rem;
-  color:var(--muted);
-  line-height:1.48;
-  margin-top:7px;
-}
-.section-head{
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-  margin:0 0 14px;
-}
-.section-eyebrow{
-  font-size:.66rem;
-  font-weight:800;
-  color:var(--accent-2);
-  text-transform:uppercase;
-  letter-spacing:.9px;
-}
-.section-title{
-  margin:0;
-  font-size:1.08rem;
-  font-weight:800;
-  color:var(--ink);
-}
-.section-copy{
-  margin:0;
-  max-width:60rem;
-  font-size:.82rem;
-  line-height:1.55;
-  color:var(--muted);
-}
-.note-grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:12px;
-  margin:0 0 18px;
-}
-.note-block{
-  background:rgba(255,255,255,.72);
-  border:1px dashed var(--line-strong);
-  border-radius:8px;
-  padding:12px 14px;
-}
-.note-title{
-  font-size:.72rem;
-  font-weight:800;
-  color:var(--ink);
-  text-transform:uppercase;
-  letter-spacing:.65px;
-}
-.note-copy{
-  margin:6px 0 0;
-  font-size:.78rem;
-  line-height:1.5;
-  color:var(--muted);
-}
-@media (max-width: 1100px){
-  .summary-grid,.note-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .plot-frame{height:clamp(220px,60vw,320px);}
+  .plot-frame.plot-map{height:clamp(220px,60vw,310px);}
+  .plot-frame.plot-wide{height:clamp(300px,80vw,460px);}
+  .figure-frame{height:clamp(200px,58vw,300px);}
+  .result-frame.result-map{min-height:clamp(220px,60vw,310px);}
+  .result-frame.result-gauge{min-height:clamp(230px,60vw,330px);}
+  .nav-tabs .nav-link{padding:.5rem .8rem;font-size:.74rem;}
+  .cm-wrap{grid-template-columns:96px 1fr 1fr;grid-template-rows:38px 1fr 1fr;}
 }
 @media (max-width: 700px){
   .summary-grid,.note-grid{grid-template-columns:1fr;}
+  .page-title{font-size:1.42rem;}
+  .navbar{padding:.7rem .85rem;}
 }
-"""
-
-_CSS += """
-*{letter-spacing:0!important;}
-html,body{background:#FFFFFF;}
-.navbar{
-  background:#FFFFFF!important;
-  box-shadow:none;
-  backdrop-filter:none;
-  padding:.78rem 1.35rem;
-}
-.navbar::after{height:3px;background:var(--red);}
-.bslib-sidebar-layout>.sidebar{
-  background:#FFFFFF!important;
-  box-shadow:none;
-}
-.bslib-sidebar-layout>.main{background:#FFFFFF;}
-.page-title{font-size:1.7rem;letter-spacing:0;}
-.page-title::after{height:3px;border-radius:0;background:var(--red);}
-.card,.summary-tile,.chip{
-  background:#FFFFFF!important;
-  border:1px solid var(--line-strong)!important;
-  box-shadow:none!important;
-  border-radius:8px!important;
-}
-.card::before{height:3px;background:var(--blue);}
-.card-header{background:#FFFFFF!important;padding:.82rem 1rem;}
-.summary-tile{border-top:3px solid var(--tile)!important;}
-.summary-tile::before{display:none;}
-.note-block{
-  background:#FFFFFF;
-  border:0;
-  border-left:3px solid var(--mint);
-  border-radius:0;
-  padding:9px 12px;
-}
-.nav-tabs .nav-link{box-shadow:none;}
-.btn-primary{box-shadow:none!important;}
-@media (max-width:700px){
-  .page-title{font-size:1.45rem;}
-  .navbar{padding:.68rem .85rem;}
-}
-"""
-
-
-# ── 4. UI ────────────────────────────────────────────────────────────────────
+"""# ── 4. UI ────────────────────────────────────────────────────────────────────
 
 def _slider_step(lo: float, hi: float) -> float:
     rng = hi - lo
@@ -1458,46 +1448,49 @@ app_ui = ui.page_sidebar(
 
     ui.tags.style(_CSS),
     ui.tags.div(
-        ui.tags.div("Diagnosis operations dashboard", class_="hero-kicker"),
-        ui.tags.h3(
-            "Breast Cancer Diagnosis Command Center",
-            class_="page-title",
+        ui.tags.div(
+            ui.tags.div("Diagnosis operations dashboard", class_="hero-kicker"),
+            ui.tags.h3(
+                "Breast Cancer Diagnosis Command Center",
+                class_="page-title",
+            ),
+            ui.tags.p(
+                f"Wisconsin Breast Cancer Dataset · N={N_TOTAL} · "
+                f"LASSO lambda_1se retained {N_SEL} of {len(FEAT_NAMES)} features before plain logistic regression. "
+                f"Held-out AUC {AUC_TEST:.3f} · Brier {BRIER_TEST:.3f} · "
+                f"stratified split train {N_TRAIN} / test {N_TEST}.",
+                class_="page-subtitle",
+            ),
+            class_="hero-copy",
         ),
-        ui.tags.p(
-            f"Wisconsin Breast Cancer Dataset · N={N_TOTAL} · "
-            f"LASSO lambda_1se retained {N_SEL} of {len(FEAT_NAMES)} features before plain logistic regression. "
-            f"Held-out AUC {AUC_TEST:.3f} · Brier {BRIER_TEST:.3f} · "
-            f"stratified split train {N_TRAIN} / test {N_TEST}.",
-            class_="page-subtitle",
+        ui.tags.div(
+            _summary_tile(
+                "Cohort",
+                f"{N_TOTAL}",
+                f"{n_benign} benign / {n_malignant} malignant cases",
+                "accent-blue",
+            ),
+            _summary_tile(
+                "Feature funnel",
+                f"{N_SEL} retained",
+                f"from {len(FEAT_NAMES)} raw predictors at lambda_1se",
+                "accent-teal",
+            ),
+            _summary_tile(
+                "Generalization",
+                f"{AUC_TEST:.3f}",
+                f"train AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
+                "accent-navy",
+            ),
+            _summary_tile(
+                "Calibration",
+                f"{BRIER_TEST:.3f}",
+                f"HL p={HL_P:.3f} · null Brier {NULL_BRIER:.3f}",
+                "accent-salmon",
+            ),
+            class_="summary-grid",
         ),
-        class_="hero-copy",
-    ),
-    ui.tags.div(
-        _summary_tile(
-            "Cohort",
-            f"{N_TOTAL}",
-            f"{n_benign} benign / {n_malignant} malignant cases",
-            "accent-blue",
-        ),
-        _summary_tile(
-            "Feature funnel",
-            f"{N_SEL} retained",
-            f"from {len(FEAT_NAMES)} raw predictors at lambda_1se",
-            "accent-teal",
-        ),
-        _summary_tile(
-            "Generalization",
-            f"{AUC_TEST:.3f}",
-            f"train AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
-            "accent-navy",
-        ),
-        _summary_tile(
-            "Calibration",
-            f"{BRIER_TEST:.3f}",
-            f"HL p={HL_P:.3f} · null Brier {NULL_BRIER:.3f}",
-            "accent-salmon",
-        ),
-        class_="summary-grid",
+        class_="hero-banner",
     ),
 
     ui.navset_tab(
@@ -1691,33 +1684,65 @@ app_ui = ui.page_sidebar(
             ),
             ui.output_ui("perf_metrics_table"),
             ui.output_ui("coef_table"),
-            ui.card(
-                ui.card_header("Feature Selection — LASSO Regularisation"),
-                ui.tags.div(
-                    ui.output_image("fig_feat_sel", width="100%", height="auto"),
-                    class_="figure-frame",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Feature Selection — LASSO Regularisation"),
+                    ui.tags.div(
+                        ui.output_ui("fig_feat_sel"),
+                        class_="figure-frame",
+                    ),
+                    ui.tags.p(
+                        ui.tags.span("Figure 1", class_="fig-no"),
+                        " · LASSO regularisation path (A) and 5-fold "
+                        "cross-validated AUC (B). λ₁ₛₑ retains "
+                        f"{N_SEL} features (red dotted rule).",
+                        class_="figure-caption",
+                    ),
+                    class_="equal-card",
                 ),
-            ),
-            ui.card(
-                ui.card_header("Model Performance"),
-                ui.tags.div(
-                    ui.output_image("fig_perf", width="100%", height="auto"),
-                    class_="figure-frame",
+                ui.card(
+                    ui.card_header("Model Performance"),
+                    ui.tags.div(
+                        ui.output_ui("fig_perf"),
+                        class_="figure-frame",
+                    ),
+                    ui.tags.p(
+                        ui.tags.span("Figure 2", class_="fig-no"),
+                        " · ROC curves on training and held-out test "
+                        "sets (A), and plain logistic-regression coefficients (B).",
+                        class_="figure-caption",
+                    ),
+                    class_="equal-card",
                 ),
-            ),
-            ui.card(
-                ui.card_header("Linearity Assessment (LRT, alpha = 0.10)"),
-                ui.tags.div(
-                    ui.output_image("fig_linearity", width="100%", height="auto"),
-                    class_="figure-frame",
+                ui.card(
+                    ui.card_header("Linearity Assessment (LRT, α = 0.10)"),
+                    ui.tags.div(
+                        ui.output_ui("fig_linearity"),
+                        class_="figure-frame",
+                    ),
+                    ui.tags.p(
+                        ui.tags.span("Figure 3", class_="fig-no"),
+                        " · Log-odds linearity check for each retained "
+                        "feature: binned empirical log-odds versus the linear fit.",
+                        class_="figure-caption",
+                    ),
+                    class_="equal-card",
                 ),
-            ),
-            ui.card(
-                ui.card_header("Collinearity (VIF)"),
-                ui.tags.div(
-                    ui.output_image("fig_vif", width="100%", height="auto"),
-                    class_="figure-frame",
+                ui.card(
+                    ui.card_header("Collinearity (VIF)"),
+                    ui.tags.div(
+                        ui.output_ui("fig_vif"),
+                        class_="figure-frame",
+                    ),
+                    ui.tags.p(
+                        ui.tags.span("Figure 4", class_="fig-no"),
+                        " · Variance inflation factors on the scaled "
+                        "training matrix (VIF = 1/(1−R²)); rules at 5 and 10.",
+                        class_="figure-caption",
+                    ),
+                    class_="equal-card",
                 ),
+                col_widths=[6, 6],
             ),
         ),
 
@@ -1776,16 +1801,19 @@ def server(input, output, session):
             reactive.invalidate_later(3)
             _refresh_tick.set(_refresh_n["c"])
 
-    @render.plot
+    @reactive.calc
+    def _visits():
+        _refresh_tick.get()  # re-fetch when the tick advances
+        return _fetch_visits_bc()
+
+    @render.plot(alt="Global visitor map")
     def visit_map():
-        _refresh_tick.get()  # re-render when the tick advances
-        return _make_visit_map_bc(_user_loc["lat"], _user_loc["lon"])
+        return _make_visit_map_bc(_visits(), _user_loc["lat"], _user_loc["lon"])
 
     @render.ui
     def visit_stats():
         from collections import Counter
-        _refresh_tick.get()  # re-render when the tick advances
-        visits = _fetch_visits_bc()
+        visits = _visits()
         total  = len(visits)
         counts = Counter(
             f"{v.get('city')}, {_country_name(v.get('country'))}" if v.get("country") else v.get("city")
@@ -1845,12 +1873,16 @@ def server(input, output, session):
         p_mal = 1.0 - p_ben
         cls  = "Malignant" if p_mal >= 0.5 else "Benign"
         clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
+        _tint = "#FEF2F2" if cls == "Malignant" else "#ECFEFF"
         chips = (
-            f'<div class="chip"><span class="chip-lbl">P(Malignant)</span>'
+            f'<div class="chip" style="--tile:{CLR_MAL};--tint:#FEF2F2;">'
+            f'<span class="chip-lbl">P(Malignant)</span>'
             f'<span class="chip-val" style="color:{CLR_MAL};">{p_mal*100:.1f}%</span></div>'
-            f'<div class="chip"><span class="chip-lbl">P(Benign)</span>'
+            f'<div class="chip" style="--tile:{CLR_BEN};--tint:#ECFEFF;">'
+            f'<span class="chip-lbl">P(Benign)</span>'
             f'<span class="chip-val" style="color:{CLR_BEN};">{p_ben*100:.1f}%</span></div>'
-            f'<div class="chip"><span class="chip-lbl">Classification</span>'
+            f'<div class="chip" style="--tile:{clr};--tint:{_tint};">'
+            f'<span class="chip-lbl">Classification</span>'
             f'<span class="chip-val" style="color:{clr};">{cls}</span></div>'
         )
         return ui.HTML(f'<div class="infobar">{chips}</div>')
@@ -1988,23 +2020,24 @@ def server(input, output, session):
 
     # ── Decision threshold ────────────────────────────────────────────────────
 
-    @render.plot
+    @render.plot(alt="Predicted probability distribution by class")
     def hist_img():
         thr  = float(input.threshold())
         p_malignant = 1.0 - PROB_TRAIN
-        fig, ax = plt.subplots(figsize=(7.0, 3.5))
+        fig, ax = plt.subplots(figsize=(10.3, 4.9))
         _style_axis(ax)
+        _grid_light(ax)
         bins = np.linspace(0, 1, 26)
         ax.hist(p_malignant[y_tr == 0], bins=bins, color=CLR_MAL, alpha=0.65,
                 label="Malignant", edgecolor="none")
         ax.hist(p_malignant[y_tr == 1], bins=bins, color=CLR_BEN, alpha=0.65,
                 label="Benign",    edgecolor="none")
-        ax.axvline(thr, color=_NAVY, lw=1.0, ls="--",
+        ax.axvline(thr, color=_INK_BC, lw=1.0, ls="--",
                    label=f"Threshold = {thr:.2f}", zorder=3)
         ax.set_xlabel("P(Malignant)")
         ax.set_ylabel("Count")
         ax.set_xlim(0, 1)
-        ax.legend(fontsize=8.0, frameon=False, loc="upper center", ncol=3)
+        ax.legend(fontsize=7.5, frameon=False, loc="upper center", ncol=3)
         fig.tight_layout(pad=0.8)
         return fig
 
@@ -2026,20 +2059,20 @@ def server(input, output, session):
     <div class="cm-col-hdr">Predicted<br>Malignant</div>
     <div class="cm-col-hdr">Predicted<br>Benign</div>
     <div class="cm-row-hdr">Actual<br>Malignant</div>
-    <div class="cm-cell" style="background:#EEF3FA;">
+    <div class="cm-cell cm-tp">
       <span class="cm-n" style="color:{CLR_MAL};">{tp}</span>
       <span class="cm-desc">True Positive<br>(detected malignant)</span>
     </div>
-    <div class="cm-cell" style="background:#F2F6FB;">
+    <div class="cm-cell cm-fn">
       <span class="cm-n" style="color:{CLR_REF};">{fn}</span>
       <span class="cm-desc">False Negative<br><b>missed cancer!</b></span>
     </div>
     <div class="cm-row-hdr">Actual<br>Benign</div>
-    <div class="cm-cell" style="background:#EEF3FA;">
+    <div class="cm-cell cm-fp">
       <span class="cm-n" style="color:{CLR_1SE};">{fp}</span>
       <span class="cm-desc">False Positive<br>(benign flagged malignant)</span>
     </div>
-    <div class="cm-cell" style="background:#EAF8FA;">
+    <div class="cm-cell cm-tn">
       <span class="cm-n" style="color:{CLR_BEN};">{tn}</span>
       <span class="cm-desc">True Negative<br>(correct benign)</span>
     </div>
@@ -2074,27 +2107,23 @@ def server(input, output, session):
 </p>
 """)
 
-    # ── Results figures (separate panels) ────────────────────────────────────
+    # ── Results figures (pre-rendered data URIs) ──────────────────────────────
 
-    @render.image
+    @render.ui
     def fig_feat_sel():
-        return {"src": _bytes_to_tmp(_FEAT_SEL_BYTES, "feat_sel"),
-                "alt": "Feature Selection"}
+        return ui.tags.img(src=_FEAT_SEL_SRC, alt="Feature Selection")
 
-    @render.image
+    @render.ui
     def fig_perf():
-        return {"src": _bytes_to_tmp(_PERF_BYTES, "perf"),
-                "alt": "Model Performance"}
+        return ui.tags.img(src=_PERF_SRC, alt="Model Performance")
 
-    @render.image
+    @render.ui
     def fig_linearity():
-        return {"src": _bytes_to_tmp(_LIN_BYTES, "linearity"),
-                "alt": "Linearity Assessment"}
+        return ui.tags.img(src=_LIN_SRC, alt="Linearity Assessment")
 
-    @render.image
+    @render.ui
     def fig_vif():
-        return {"src": _bytes_to_tmp(_VIF_BYTES, "vif"),
-                "alt": "Collinearity VIF"}
+        return ui.tags.img(src=_VIF_SRC, alt="Collinearity VIF")
 
     # ── Coefficient table (kept for Methods panel reference) ──────────────────
 
@@ -2312,20 +2341,6 @@ def server(input, output, session):
 """)
 
 
-# ── 6. Utility — bytes → temp file for render.image ──────────────────────────
-import tempfile, os
-
-_TMP_FILES: dict[str, str] = {}
-
-
-def _bytes_to_tmp(data: bytes, key: str) -> str:
-    if key not in _TMP_FILES:
-        fd, path = tempfile.mkstemp(suffix=".png", prefix=f"bc_{key}_")
-        os.close(fd)
-        with open(path, "wb") as fh:
-            fh.write(data)
-        _TMP_FILES[key] = path
-    return _TMP_FILES[key]
-
+# ── 6. App ────────────────────────────────────────────────────────────────────
 
 app = App(app_ui, server)
