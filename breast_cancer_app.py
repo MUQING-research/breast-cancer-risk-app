@@ -5,10 +5,21 @@ Wisconsin Breast Cancer Dataset (sklearn) · N=569 · 30 features
 Cell Press visual style · Research & educational use only
 """
 from __future__ import annotations
-import base64, io, pickle, warnings, threading, os, tempfile, time
+
+import base64
+import html
+import io
+import os
+import pickle
+import tempfile
+import threading
+import warnings
 from collections import Counter
+
 import requests
-import matplotlib; matplotlib.use("Agg")
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
@@ -56,11 +67,10 @@ if os.name == "nt":
     tempfile.TemporaryDirectory = _SafeTemporaryDirectory
 
 # ── Palette ───────────────────────────────────────────────────────────────────
-# Purple-coordinated figure palette (harmonised with the page theme):
-# rose/cyan/emerald/indigo/pink · slate/lavender · red/amber/plum
+# Cell journal figure palette.
 CELL_COLORS = [
-    "#E11D48", "#06B6D4", "#10B981", "#4F46E5", "#EC4899",
-    "#94A3B8", "#A78BFA", "#DC2626", "#F59E0B", "#9333EA",
+    "#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F",
+    "#8491B4", "#91D1C2", "#DC0000", "#7E6148", "#B09C85",
 ]
 CLR_MAL   = CELL_COLORS[0]
 CLR_BEN   = CELL_COLORS[1]
@@ -137,8 +147,10 @@ def _hosmer_lemeshow(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10):
         exp  = float(y_prob[mask].sum())
         nobs = n_b - obs
         nexp = n_b - exp
-        if exp  > 1e-10: chi2 += (obs  - exp)  ** 2 / exp
-        if nexp > 1e-10: chi2 += (nobs - nexp) ** 2 / nexp
+        if exp > 1e-10:
+            chi2 += (obs - exp) ** 2 / exp
+        if nexp > 1e-10:
+            chi2 += (nobs - nexp) ** 2 / nexp
     df = n_bins - 2
     return float(chi2), float(1 - stats.chi2.cdf(chi2, df)), df
 
@@ -287,7 +299,7 @@ def _train_and_build() -> dict:
     _feat_ranges: dict[str, tuple[float, float, float]] = {}
     _train_medians: dict[str, float] = {}
     for f in _sel_cols:
-        v = X_all[f].values
+        v = X_train[f].values
         _train_medians[f] = float(np.median(X_train[f].values))
         _feat_ranges[f] = (float(v.min()), float(v.max()), _train_medians[f])
 
@@ -487,9 +499,8 @@ def _style_axis(ax):
 
 
 def _grid_light(ax):
-    """Subtle horizontal gridlines behind data — modern journal-panel look."""
-    ax.grid(True, axis="y", color=_GRID_BC, linewidth=0.7, zorder=0)
-    ax.set_axisbelow(True)
+    """Keep journal figures free of gridlines."""
+    ax.grid(False)
 
 
 def _autoscale(fig, scale=0.65, target_w=7.0):
@@ -581,7 +592,8 @@ def _make_perf_fig():
                 label=f"Test   AUC={AUC_TEST:.3f}", zorder=3)
     ax_roc.set_xlabel("1 – Specificity")
     ax_roc.set_ylabel("Sensitivity")
-    ax_roc.set_xlim(-0.01, 1.01); ax_roc.set_ylim(-0.01, 1.01)
+    ax_roc.set_xlim(-0.01, 1.01)
+    ax_roc.set_ylim(-0.01, 1.01)
     _P(ax_roc, "A")
     ax_roc.legend(loc="lower right", fontsize=7.5)
 
@@ -688,14 +700,8 @@ print("  Static figures rendered.", flush=True)
 # Runtime integrations are optional. The app should still start when these
 # variables are absent, with visit logging and geo-enrichment disabled.
 _IPINFO_TOKEN = os.environ.get("IPINFO_TOKEN", "").strip()
-_SUPABASE_URL = os.environ.get(
-    "SUPABASE_URL", "https://vmivonjwubhbvlufxkdd.supabase.co"
-).strip()
-# Supabase anon keys are public client credentials; table access is governed by RLS.
-_SUPABASE_KEY = os.environ.get(
-    "SUPABASE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtaXZvbmp3dWJoYnZsdWZ4a2RkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwODMyMDQsImV4cCI6MjA5ODY1OTIwNH0.IHH8dPFWYCkZ7eFhIx5zHY0QGMi1_pDM1ebBfzoHha0",
-).strip()
+_SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+_SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
 _ANALYTICS_CONFIGURED = bool(
     _SUPABASE_URL and _SUPABASE_KEY
 )
@@ -1780,6 +1786,8 @@ def server(input, output, session):
         _ip = ""
 
     def _do_log(ip: str) -> None:
+        if not _ANALYTICS_CONFIGURED:
+            return
         country, city, lat, lon = _lookup_ip_location(ip)
         if lat is not None and lon is not None:
             _user_loc["lat"] = lat
@@ -1821,7 +1829,7 @@ def server(input, output, session):
         )
         top    = counts.most_common(10)
         rows   = "".join(
-            f"<tr><td style='font-size:.70rem;'>{i+1}. {c}</td>"
+            f"<tr><td style='font-size:.70rem;'>{i+1}. {html.escape(str(c))}</td>"
             f"<td class='num' style='font-size:.70rem;'>{n}</td></tr>"
             for i, (c, n) in enumerate(top)
         )
@@ -1974,7 +1982,8 @@ def server(input, output, session):
         ok  = msg and msg.startswith("OK")
         col = CLR_BEN if ok else _MUTED
         return ui.HTML(
-            f'<p style="font-size:.80rem;color:{col};margin:6px 0 0;">{msg or ""}</p>'
+            f'<p style="font-size:.80rem;color:{col};margin:6px 0 0;">'
+            f'{html.escape(msg or "")}</p>'
         )
 
     @render.ui
@@ -1987,7 +1996,7 @@ def server(input, output, session):
             )
         show = df.head(20)
         cols = list(show.columns)
-        thead = "".join(f"<th>{c}</th>" for c in cols)
+        thead = "".join(f"<th>{html.escape(str(c))}</th>" for c in cols)
         tbody = ""
         for _, row in show.iterrows():
             cells = ""
@@ -1995,11 +2004,14 @@ def server(input, output, session):
                 v = row[c]
                 if c == "Prediction":
                     col = CLR_BEN if v == "Benign" else CLR_MAL
-                    cells += (f'<td style="font-weight:700;color:{col};">{v}</td>')
+                    cells += (
+                        f'<td style="font-weight:700;color:{col};">'
+                        f'{html.escape(str(v))}</td>'
+                    )
                 elif c in ("P_benign", "P_malignant"):
                     cells += f'<td class="num">{v:.4f}</td>'
                 else:
-                    cells += f"<td>{v}</td>"
+                    cells += f"<td>{html.escape(str(v))}</td>"
             tbody += f"<tr>{cells}</tr>"
         return ui.HTML(f"""
 <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
