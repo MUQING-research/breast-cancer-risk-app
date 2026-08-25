@@ -205,9 +205,9 @@ Do not replace the deployment bundle with raw training records. The tracked bund
 
 ## Optional visitor analytics
 
-The dashboard can render aggregate visit statistics through Supabase and locate public IP addresses through IPinfo or the `ipwho.is` fallback. Hosted visitors should be aware that country, city, latitude, and longitude may be recorded for this map.
+The dashboard can optionally render aggregate visit statistics through Supabase and locate public IP addresses through IPinfo or the `ipwho.is` fallback. Analytics are disabled unless both `SUPABASE_URL` and `SUPABASE_KEY` are configured. When enabled, hosted visitors should be informed that country, city, latitude, and longitude may be recorded for this map.
 
-The application code does not persist prediction form values or uploaded CSV contents. Analytics settings can be overridden with:
+The application code does not persist prediction form values or uploaded CSV contents. Analytics settings are supplied through environment variables:
 
 | Environment variable | Purpose |
 |---|---|
