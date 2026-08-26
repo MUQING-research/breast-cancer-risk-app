@@ -80,16 +80,16 @@ CLR_1SE   = CELL_COLORS[7]
 CLR_MIN   = CELL_COLORS[8]
 CLR_REF   = CELL_COLORS[5]
 _MUTED    = "#64748B"
-_NAVY     = "#4F46E5"
-_ORANGE   = "#F59E0B"
-_EDGE     = "#94A3B8"
-_FAINT    = "#A78BFA"
+_NAVY     = CELL_COLORS[3]
+_ORANGE   = CELL_COLORS[4]
+_EDGE     = CELL_COLORS[5]
+_FAINT    = CELL_COLORS[6]
 _INK_BC   = "#111111"   # reference rules / misc ink
 _AXIS_BC  = "#334155"   # axis spines
 _TICK_BC  = "#475569"   # tick marks / tick labels
 _LABEL_BC = "#1E293B"   # axis labels
-_GRID_BC  = "#EDE9FE"   # subtle lavender gridlines
-_PANEL_BC = "#7C3AED"   # violet panel letters (A, B, ...)
+_GRID_BC  = "#E2E8F0"   # neutral reference grid colour
+_PANEL_BC = CELL_COLORS[0]  # red panel letters (A, B, ...)
 
 plt.rcParams.update({
     "font.family":         "Arial",
@@ -478,7 +478,7 @@ def _fig_buf(fig) -> str:
 
 
 def _P(ax, letter, fs=10.5):
-    """Journal-style panel label: bold violet letter above top-left."""
+    """Journal-style panel label: bold Cell red letter above top-left."""
     ax.set_title(letter, fontsize=fs, fontweight="bold",
                  loc="left", pad=3, color=_PANEL_BC)
 
@@ -950,11 +950,11 @@ def _make_visit_map_bc(visits, user_lat=None, user_lon=None):
 _CSS = """
 
 :root{
-  --red:#E11D48;--blue:#06B6D4;--teal:#A855F7;--navy:#7C3AED;--salmon:#EC4899;
-  --lav:#A78BFA;--mint:#A78BFA;--crimson:#DC2626;--brown:#64748B;--tan:#F59E0B;
+  --red:#E64B35;--blue:#4DBBD5;--teal:#00A087;--navy:#3C5488;--salmon:#F39B7F;
+  --lav:#8491B4;--mint:#91D1C2;--crimson:#DC0000;--brown:#7E6148;--tan:#B09C85;
   --ink:#1E293B;--muted:#64748B;--surface:#FFFFFF;--bg:#FFFFFF;
   --line:#E2E8F0;--line-strong:#CBD5E1;
-  --accent:#7C3AED;--accent-dark:#6D28D9;
+  --accent:#E64B35;--accent-dark:#DC0000;
   --r:8px;--rs:6px;
   --font:'Arial','Helvetica Neue',Helvetica,'Liberation Sans','DejaVu Sans',sans-serif;
   --serif:'Arial','Helvetica Neue',Helvetica,'Liberation Sans',sans-serif;
@@ -968,9 +968,9 @@ html,body{
   color:var(--ink);
   -webkit-font-smoothing:antialiased;
 }
-/* Masthead — journal style: white bar, hairline, purple rule */
+/* Masthead — Cell red clinical theme. */
 .navbar{
-  background:linear-gradient(90deg,#6D28D9,#7C3AED 60%,#9333EA)!important;
+  background:linear-gradient(90deg,#DC0000,#E64B35 62%,#F39B7F)!important;
   border-bottom:none!important;
   box-shadow:0 4px 14px rgba(109,40,217,.25)!important;
   padding:.9rem 1.5rem;
@@ -1302,7 +1302,7 @@ html,body{
 .cm-cell .cm-desc{font-size:.68rem;color:var(--muted);margin-top:5px;line-height:1.35;}
 /* Rich colour layer */
 .hero-banner{
-  background:linear-gradient(120deg,#6D28D9,#7C3AED 45%,#9333EA);
+  background:linear-gradient(120deg,#DC0000,#E64B35 48%,#F39B7F);
   border-radius:12px;
   padding:22px 24px 16px;
   margin-bottom:18px;
@@ -1354,6 +1354,70 @@ html,body{
 }
 .methods p{font-size:.82rem;line-height:1.58;margin:0 0 12px;}
 .bslib-page-fill{height:100dvh!important;}
+
+/* Cell journal palette reset: breast cancer uses red as the primary accent. */
+:root{
+  --red:#E64B35;--blue:#4DBBD5;--teal:#00A087;--navy:#3C5488;--salmon:#F39B7F;
+  --lav:#8491B4;--mint:#91D1C2;--crimson:#DC0000;--brown:#7E6148;--tan:#B09C85;
+  --accent:#E64B35;--accent-dark:#DC0000;--heading:#3C5488;
+  --accent-tint:#FFF9F7;--accent-soft:#FFF3F0;--accent-line:#F3D5CE;
+}
+.navbar{
+  background:linear-gradient(90deg,#DC0000,#E64B35 62%,#F39B7F)!important;
+  box-shadow:0 4px 14px rgba(230,75,53,.24)!important;
+}
+.bslib-sidebar-layout>.sidebar{background:var(--accent-tint)!important;}
+.sec,.form-label,.page-title,.card-header,.chip-lbl,.summary-label,
+.section-title,.note-title,.tbl th,.cm-col-hdr,.cm-row-hdr,
+.methods h4{color:var(--heading)!important;}
+.form-control:focus,.form-select:focus{
+  box-shadow:0 0 0 3px rgba(230,75,53,.16)!important;
+}
+.irs-single{background:var(--accent)!important;}
+.irs-single::before{border-top-color:var(--accent)!important;}
+.card{border-color:var(--accent-line)!important;}
+.card-header{
+  background:var(--accent-tint)!important;
+  border-bottom-color:var(--accent-line)!important;
+}
+.chip,.summary-tile,.figure-frame .shiny-html-output img{
+  border-color:var(--accent-line);
+}
+.nav-tabs{
+  border-bottom-color:var(--accent-line)!important;
+  background:var(--accent-tint)!important;
+}
+.nav-tabs .nav-link{color:var(--heading)!important;}
+.nav-tabs .nav-link:hover{background:var(--accent-soft)!important;}
+.tbl th{background:var(--accent-tint);}
+.tbl tr:hover td{background:var(--accent-tint);}
+.figure-caption,.disclaimer{border-top-color:var(--accent-line);}
+.prob-bar-wrap{background:var(--accent-soft);}
+.cm-col-hdr,.cm-row-hdr{background:var(--accent-soft);}
+.hero-banner{
+  background:linear-gradient(120deg,#DC0000,#E64B35 48%,#F39B7F)!important;
+}
+.hero-banner .hero-kicker,
+.hero-banner .page-title,
+.hero-banner .summary-label{color:#FFFFFF!important;}
+.hero-banner .summary-detail{color:rgba(255,255,255,.84)!important;}
+.hero-banner .page-title::after{background:#91D1C2;}
+.hero-banner .summary-tile{border-top-color:#91D1C2!important;}
+.chip,.metric-chip,.summary-tile{background:var(--tint,var(--accent-soft));}
+.stage-tile{background:var(--stint,var(--accent-soft));}
+.summary-tile.accent-blue{--tile:#4DBBD5;--tint:#EFF8FA;--tile-ink:#3C5488;}
+.summary-tile.accent-teal{--tile:#00A087;--tint:#EFF9F7;--tile-ink:#00A087;}
+.summary-tile.accent-navy{--tile:#3C5488;--tint:#F1F3F7;--tile-ink:#3C5488;}
+.summary-tile.accent-salmon{--tile:#F39B7F;--tint:#FFF4F0;--tile-ink:#E64B35;}
+.summary-tile.accent-crimson{--tile:#DC0000;--tint:#FFF1F0;--tile-ink:#DC0000;}
+.stage-1{--stage:#4DBBD5;--stint:#EFF8FA;--stage-ink:#3C5488;}
+.stage-2{--stage:#00A087;--stint:#EFF9F7;--stage-ink:#00A087;}
+.stage-3{--stage:#3C5488;--stint:#F1F3F7;--stage-ink:#3C5488;}
+.stage-4{--stage:#F39B7F;--stint:#FFF4F0;--stage-ink:#E64B35;}
+.cm-cell.cm-tp,.cm-cell.cm-fn{background:#FFF1F0;border-color:#F39B7F;}
+.cm-cell.cm-fp{background:#FFF8F0;border-color:#B09C85;}
+.cm-cell.cm-tn{background:#EFF9F7;border-color:#91D1C2;}
+.fig-no{color:var(--accent);}
 @media (max-width: 1100px){
   .summary-grid,.note-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
@@ -1881,12 +1945,12 @@ def server(input, output, session):
         p_mal = 1.0 - p_ben
         cls  = "Malignant" if p_mal >= 0.5 else "Benign"
         clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
-        _tint = "#FEF2F2" if cls == "Malignant" else "#ECFEFF"
+        _tint = "#FFF1F0" if cls == "Malignant" else "#EFF9F7"
         chips = (
-            f'<div class="chip" style="--tile:{CLR_MAL};--tint:#FEF2F2;">'
+            f'<div class="chip" style="--tile:{CLR_MAL};--tint:#FFF1F0;">'
             f'<span class="chip-lbl">P(Malignant)</span>'
             f'<span class="chip-val" style="color:{CLR_MAL};">{p_mal*100:.1f}%</span></div>'
-            f'<div class="chip" style="--tile:{CLR_BEN};--tint:#ECFEFF;">'
+            f'<div class="chip" style="--tile:{CLR_BEN};--tint:#EFF9F7;">'
             f'<span class="chip-lbl">P(Benign)</span>'
             f'<span class="chip-val" style="color:{CLR_BEN};">{p_ben*100:.1f}%</span></div>'
             f'<div class="chip" style="--tile:{clr};--tint:{_tint};">'
@@ -1902,7 +1966,7 @@ def server(input, output, session):
         cls  = "Malignant" if p_mal >= 0.5 else "Benign"
         clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
         pct  = p_mal * 100
-        badge_bg = "#EDF2FA" if p_mal >= 0.5 else "#EAF8FA"
+        badge_bg = "#FFF1F0" if p_mal >= 0.5 else "#EFF9F7"
         return ui.HTML(f"""
 <div class="prob-gauge">
   <div class="prob-num" style="color:{clr};">{pct:.1f}%</div>
