@@ -1513,6 +1513,10 @@ html,body{
 }
 """# ── 4. UI ────────────────────────────────────────────────────────────────────
 
+# Keep the active interface theme in one deployable stylesheet.
+_CSS = (Path(__file__).parent / "theme.css").read_text(encoding="utf-8")
+
+
 def _slider_step(lo: float, hi: float) -> float:
     rng = hi - lo
     if rng == 0:
@@ -2028,12 +2032,12 @@ def server(input, output, session):
         p_mal = 1.0 - p_ben
         cls  = "Malignant" if p_mal >= 0.5 else "Benign"
         clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
-        _tint = "#FFF1F0" if cls == "Malignant" else "#EFF9F7"
+        _tint = "#FAF1F2" if cls == "Malignant" else "#EEF6F4"
         chips = (
-            f'<div class="chip" style="--tile:{CLR_MAL};--tint:#FFF1F0;">'
+            f'<div class="chip" style="--tile:{CLR_MAL};--tint:#FAF1F2;">'
             f'<span class="chip-lbl">P(Malignant)</span>'
             f'<span class="chip-val" style="color:{CLR_MAL};">{p_mal*100:.1f}%</span></div>'
-            f'<div class="chip" style="--tile:{CLR_BEN};--tint:#EFF9F7;">'
+            f'<div class="chip" style="--tile:{CLR_BEN};--tint:#EEF6F4;">'
             f'<span class="chip-lbl">P(Benign)</span>'
             f'<span class="chip-val" style="color:{CLR_BEN};">{p_ben*100:.1f}%</span></div>'
             f'<div class="chip" style="--tile:{clr};--tint:{_tint};">'
@@ -2049,7 +2053,7 @@ def server(input, output, session):
         cls  = "Malignant" if p_mal >= 0.5 else "Benign"
         clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
         pct  = p_mal * 100
-        badge_bg = "#FFF1F0" if p_mal >= 0.5 else "#EFF9F7"
+        badge_bg = "#FAF1F2" if p_mal >= 0.5 else "#EEF6F4"
         return ui.HTML(f"""
 <div class="prob-gauge">
   <div class="prob-num" style="color:{clr};">{pct:.1f}%</div>

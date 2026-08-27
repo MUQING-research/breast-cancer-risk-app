@@ -7,7 +7,10 @@ from pathlib import Path
 from huggingface_hub import HfApi
 
 REPO_ID = "muqing-research/breast-cancer-classification"
-FILES   = ["breast_cancer_app.py", "app.py", "requirements.txt", "Dockerfile"]
+FILES   = [
+    "breast_cancer_app.py", "theme.css", "app.py", "requirements.txt",
+    "Dockerfile",
+]
 
 msg = sys.argv[1] if len(sys.argv) > 1 else "Update"
 api = HfApi()
