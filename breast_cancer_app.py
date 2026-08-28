@@ -1,6 +1,6 @@
 """
 breast_cancer_app.py — Breast Cancer Classification
-Two-stage pipeline: (1) LASSO (λ1se, 5-fold CV) ; (2) Plain Logistic Regression
+Two-stage pipeline: (1) LASSO (λ1se, 5-fold CV); (2) unpenalized logistic regression
 Wisconsin Breast Cancer Dataset (sklearn) · N=569 · 30 features
 Cell Press visual style · Research & educational use only
 """
@@ -246,7 +246,7 @@ def _train_and_build() -> dict:
     _sel_idx   = [_feat_names.index(f) for f in _sel_cols]
     _lasso_coef = {f: float(_lc[i]) for f, i in zip(_sel_cols, np.where(_sel_mask)[0])}
 
-    # Stage 2 — plain LR on selected features
+    # Stage 2 — unpenalized logistic regression on selected features
     X_tr_sel = X_train[_sel_cols].values
     X_te_sel = X_test[_sel_cols].values
     _pipe_lr = Pipeline([
@@ -286,7 +286,7 @@ def _train_and_build() -> dict:
     _X_tr_sc_sel = _pipe_lr.named_steps["scaler"].transform(X_tr_sel)
     _vif = _compute_vif(_X_tr_sc_sel, _sel_cols)
 
-    # LASSO regularisation path
+    # LASSO regularization path
     _X_scaled   = _pipe_lasso.named_steps["scaler"].transform(X_train.values)
     _C_PATH     = np.logspace(-4, 2, 120)
     _LOG_C      = np.log10(_C_PATH)
@@ -515,11 +515,11 @@ def _autoscale(fig, scale=0.65, target_w=7.0):
 
 
 def _make_feat_sel_fig():
-    """A: LASSO regularisation path · B: 5-fold CV AUC"""
+    """A: LASSO regularization path · B: 5-fold CV AUC"""
     fig  = plt.figure(figsize=(4.75, 2.28))
     gs   = fig.add_gridspec(1, 2, wspace=0.34)
 
-    # ── A: LASSO regularisation path ────────────────────────────────────────
+    # ── A: LASSO regularization path ────────────────────────────────────────
     ax_p = fig.add_subplot(gs[0, 0])
     _style_axis(ax_p)
     _grid_light(ax_p)
@@ -568,7 +568,7 @@ def _make_feat_sel_fig():
                   label=fr"$\lambda_{{1SE}}$ ({N_SEL})")
     ax_cv.axhline(THR_1SE, color=CLR_1SE, lw=0.8, ls="--", alpha=0.45)
     ax_cv.set_xlabel(r"$\log_{10}(C)$")
-    ax_cv.set_ylabel("5-fold CV AUC")
+    ax_cv.set_ylabel("Cross-validated AUC")
     ax_cv.yaxis.set_major_formatter(plt.FormatStrFormatter("%.3f"))
     _P(ax_cv, "B")
     ax_cv.legend(loc="lower left", fontsize=7.5)
@@ -588,9 +588,9 @@ def _make_perf_fig():
     _grid_light(ax_roc)
     ax_roc.plot([0, 1], [0, 1], color=_EDGE, lw=0.8, ls="--", alpha=0.65, zorder=1)
     ax_roc.plot(FPR_TR, TPR_TR, color=CLR_TRAIN, lw=1.0, alpha=0.9,
-                label=f"Train  AUC={AUC_TRAIN:.3f}", zorder=2)
+                label=f"Training AUC = {AUC_TRAIN:.3f}", zorder=2)
     ax_roc.plot(FPR_TE, TPR_TE, color=CLR_TEST, lw=1.0, alpha=0.9, ls="--",
-                label=f"Test   AUC={AUC_TEST:.3f}", zorder=3)
+                label=f"Test AUC = {AUC_TEST:.3f}", zorder=3)
     ax_roc.set_xlabel("1 – Specificity")
     ax_roc.set_ylabel("Sensitivity")
     ax_roc.set_xlim(-0.01, 1.01)
@@ -610,7 +610,7 @@ def _make_perf_fig():
     ax_coef.axvline(0, color=_EDGE, lw=0.8, alpha=0.65)
     ax_coef.set_yticks(range(len(_fo)))
     ax_coef.set_yticklabels(_fo, fontsize=7.5)
-    ax_coef.set_xlabel("LR Coefficient")
+    ax_coef.set_xlabel("Logistic Regression Coefficient")
     _P(ax_coef, "B")
     ax_coef.legend(
         handles=[Patch(facecolor=CLR_BEN, alpha=0.78, label="↑ Benign"),
@@ -650,7 +650,7 @@ def _make_linearity_fig():
                 color=t_col, style="italic",
                 bbox=dict(facecolor="white", edgecolor="none",
                            alpha=0.75, pad=0.5))
-        ax.set_xlabel(feat.replace("worst ", ""), labelpad=2)
+        ax.set_xlabel(feat.replace("worst ", "").title(), labelpad=2)
         ax.set_ylabel("Log-odds", labelpad=2)
         _P(ax, "ABCDEFG"[k])
         ax.tick_params(labelsize=8.0)
@@ -676,7 +676,7 @@ def _make_vif_fig():
     ax.axvline(10.0, color=CLR_1SE, lw=0.8, ls="--", alpha=0.8,
                label="VIF=10  (severe)")
     ax.set_yticks(range(len(SEL_COLS)))
-    ax.set_yticklabels(SEL_COLS, fontsize=7.5)
+    ax.set_yticklabels([feature.title() for feature in SEL_COLS], fontsize=7.5)
     ax.set_xlabel("Variance Inflation Factor")
     _P(ax, "A")
     ax.legend(loc="lower right", fontsize=7.5)
@@ -1533,7 +1533,7 @@ def _make_inputs():
         step     = _slider_step(lo, hi)
         decimals = max(0, -int(np.floor(np.log10(step)))) if step > 0 else 4
         items.append(
-            ui.input_numeric(_sid(f), f,
+            ui.input_numeric(_sid(f), f.title(),
                              value=round(med, decimals),
                              min=round(lo, decimals),
                              max=round(hi, decimals),
@@ -1577,14 +1577,14 @@ app_ui = ui.page_sidebar(
             class_="btn btn-primary w-100",
             style="margin-top:10px;font-weight:600;",
         ),
-        ui.tags.div("Model Snapshot", class_="sec"),
+        ui.tags.div("Model Summary", class_="sec"),
         ui.tags.div(
-            ui.tags.span("■ Plain Logistic Regression",
+            ui.tags.span("■ Unpenalized Logistic Regression",
                          style=f"color:{CLR_BEN};font-weight:600;font-size:.80rem;"),
             style="line-height:2;",
         ),
         ui.tags.p(
-            f"Train {N_TRAIN} / Test {N_TEST} · {N_SEL} retained features",
+            f"Training {N_TRAIN} · Test {N_TEST} · {N_SEL} selected features",
             style=f"font-size:.72rem;color:{_MUTED};margin:4px 0 0;",
         ),
         width=300,
@@ -1593,16 +1593,17 @@ app_ui = ui.page_sidebar(
     ui.tags.style(_CSS),
     ui.tags.div(
         ui.tags.div(
-            ui.tags.div("Diagnosis operations dashboard", class_="hero-kicker"),
+            ui.tags.div("Clinical prediction dashboard", class_="hero-kicker"),
             ui.tags.h3(
-                "Breast Cancer Diagnosis Command Center",
+                "Breast Cancer Classification Dashboard",
                 class_="page-title",
             ),
             ui.tags.p(
-                f"Wisconsin Breast Cancer Dataset · N={N_TOTAL} · "
-                f"LASSO lambda_1se retained {N_SEL} of {len(FEAT_NAMES)} features before plain logistic regression. "
-                f"Held-out AUC {AUC_TEST:.3f} · Brier {BRIER_TEST:.3f} · "
-                f"stratified split train {N_TRAIN} / test {N_TEST}.",
+                f"Wisconsin Diagnostic Breast Cancer dataset · N = {N_TOTAL} · "
+                f"LASSO selected {N_SEL} of {len(FEAT_NAMES)} features using the λ₁ₛₑ rule, "
+                f"followed by an unpenalized logistic regression refit. "
+                f"Held-out AUC = {AUC_TEST:.3f} · Brier score = {BRIER_TEST:.3f} · "
+                f"stratified split: {N_TRAIN} training / {N_TEST} test cases.",
                 class_="page-subtitle",
             ),
             class_="hero-copy",
@@ -1615,19 +1616,19 @@ app_ui = ui.page_sidebar(
                 "accent-blue",
             ),
             _summary_tile(
-                "Feature funnel",
-                f"{N_SEL} retained",
-                f"from {len(FEAT_NAMES)} raw predictors at lambda_1se",
+                "Selected features",
+                f"{N_SEL} of {len(FEAT_NAMES)}",
+                "selected using the λ₁ₛₑ rule",
                 "accent-teal",
             ),
             _summary_tile(
-                "Generalization",
+                "Test discrimination",
                 f"{AUC_TEST:.3f}",
-                f"train AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
+                f"training AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
                 "accent-navy",
             ),
             _summary_tile(
-                "Calibration",
+                "Test Brier score",
                 f"{BRIER_TEST:.3f}",
                 f"HL p={HL_P:.3f} · null Brier {NULL_BRIER:.3f}",
                 "accent-salmon",
@@ -1639,16 +1640,16 @@ app_ui = ui.page_sidebar(
 
     ui.navset_tab(
         ui.nav_panel(
-            "Dashboard",
+            "Prediction",
             _section_head(
-                "Prediction desk",
-                "Single-patient assessment",
-                "The main dashboard keeps the patient probability, feature context, and live usage intelligence in one analyst-oriented view.",
+                "Individual prediction",
+                "Case-level malignancy estimate",
+                "Enter the retained feature values to estimate malignancy probability and compare each value with its training-set median.",
             ),
             ui.output_ui("pred_chips"),
             ui.layout_columns(
                 ui.card(
-                    ui.card_header("Predicted Probability"),
+                    ui.card_header("Estimated Probability of Malignancy"),
                     ui.tags.div(
                         ui.output_ui("pred_gauge"),
                         class_="result-frame result-gauge",
@@ -1656,7 +1657,7 @@ app_ui = ui.page_sidebar(
                     class_="equal-card",
                 ),
                 ui.card(
-                    ui.card_header("Feature Values vs. Training Median"),
+                    ui.card_header("Feature Values vs. Training Medians"),
                     ui.tags.div(ui.output_ui("feat_table"), class_="result-frame result-gauge"),
                     class_="equal-card",
                 ),
@@ -1665,15 +1666,15 @@ app_ui = ui.page_sidebar(
             ui.tags.div(
                 _note_block(
                     "Classification rule",
-                    "The default interpretation uses P(malignant) >= 0.50. Threshold Lab lets you examine what changes when that operational cutoff moves.",
+                    "The default rule classifies a case as malignant when P(malignant) ≥ 0.50. The Decision Threshold tab shows how other cutoffs change performance.",
                 ),
                 _note_block(
                     "Feature context",
-                    "Each entered value is benchmarked against the training-set median of the retained features so direction of shift is explicit.",
+                    "Each entered value is compared with the corresponding training-set median to show the direction and magnitude of the difference.",
                 ),
                 _note_block(
-                    "Use boundary",
-                    "This tool is intended for research and educational review. It exposes model behavior but does not replace clinical assessment.",
+                    "Intended use",
+                    "This tool is intended for research and education. It illustrates model behavior and must not replace clinical assessment.",
                 ),
                 class_="note-grid",
             ),
@@ -1694,31 +1695,31 @@ app_ui = ui.page_sidebar(
                 col_widths=[8, 4],
             ),
             ui.tags.p(
-                f"Prediction uses the {N_SEL} LASSO-selected features scaled using "
-                "RobustScaler (fitted on the training set). For research and educational use only.",
+                f"Predictions use {N_SEL} LASSO-selected features and RobustScaler parameters "
+                "fitted on the training set. For research and educational use only.",
                 class_="disclaimer",
             ),
         ),
 
         ui.nav_panel(
-            "Batch Queue",
+            "Batch Prediction",
             _section_head(
-                "Batch scoring",
-                "Upload, validate, and export cohort predictions",
-                "This view is structured like a queue: validate the file on the left, inspect the first rows on the right, then export a scored table.",
+                "Batch prediction",
+                "Score a cohort from a CSV file",
+                "Upload a CSV file, verify the required columns, review the first 20 results, and download the complete scored dataset.",
             ),
             ui.tags.div(
                 _note_block(
                     "CSV schema",
-                    "The uploaded file must include the retained feature columns used by the deployed bundle.",
+                    "The uploaded file must contain every retained feature column required by the deployed model.",
                 ),
                 _note_block(
                     "Inline review",
-                    "Only the first 20 rows are shown inline so obvious column or value problems are visible before download.",
+                    "The preview shows the first 20 rows so column and value issues can be identified before download.",
                 ),
                 _note_block(
-                    "Output contract",
-                    "Downloaded predictions keep the original feature columns and append probability and class outputs.",
+                    "Downloaded output",
+                    "The downloaded file retains the original columns and adds probabilities for the malignant and benign classes, plus the predicted class.",
                 ),
                 class_="note-grid",
             ),
@@ -1747,24 +1748,24 @@ app_ui = ui.page_sidebar(
         ),
 
         ui.nav_panel(
-            "Threshold Lab",
+            "Decision Threshold",
             _section_head(
-                "Threshold tuning",
-                "Inspect the cost of moving the decision cutoff",
-                "The training-set score distribution makes overlap between benign and malignant predictions visible before you commit to a more aggressive or conservative rule.",
+                "Threshold analysis",
+                "Explore classification trade-offs",
+                "Use the training-set score distribution to see how alternative probability cutoffs change sensitivity, specificity, and classification errors.",
             ),
             ui.tags.div(
                 _note_block(
                     "Why it matters",
-                    "Changing the threshold trades sensitivity against specificity. The confusion matrix and metric panel update together so the tradeoff stays explicit.",
+                    "Changing the threshold trades sensitivity against specificity. The confusion matrix and performance metrics update together.",
                 ),
                 _note_block(
                     "Reference set",
-                    "This laboratory view is anchored on training predictions to isolate the effect of the cutoff itself.",
+                    "All calculations in this tab use training-set predictions to isolate the effect of the cutoff.",
                 ),
                 _note_block(
                     "Default baseline",
-                    "Headline performance elsewhere still references the standard 0.50 rule unless stated otherwise.",
+                    "Metrics elsewhere in the app use the default 0.50 threshold unless stated otherwise.",
                 ),
                 class_="note-grid",
             ),
@@ -1793,27 +1794,27 @@ app_ui = ui.page_sidebar(
         ),
 
         ui.nav_panel(
-            "Model Evidence",
+            "Model Evaluation",
             _section_head(
-                "Evidence stack",
-                "Feature selection, discrimination, calibration, and diagnostics",
-                "This tab turns the modeling workflow into a compact evidence sequence: headline metrics first, coefficient audit second, then the pre-rendered figures supporting the saved bundle.",
+                "Model evaluation",
+                "Selection, performance, calibration, and diagnostics",
+                "Review held-out performance, selected coefficients, and the diagnostic figures stored with the deployed model bundle.",
             ),
             ui.tags.div(
                 _summary_tile(
-                    "lambda_1se",
+                    "λ₁ₛₑ",
                     f"{C_1SE:.4g}",
                     f"{N_SEL} retained / {len(FEAT_NAMES)} raw features",
                     "accent-crimson",
                 ),
                 _summary_tile(
-                    "Brier skill",
+                    "Brier skill score",
                     f"{1 - BRIER_TEST / NULL_BRIER:.3f}",
                     f"test Brier {BRIER_TEST:.3f} vs null {NULL_BRIER:.3f}",
                     "accent-teal",
                 ),
                 _summary_tile(
-                    "Reference rule",
+                    "Classification rule",
                     "P(malignant) >= 0.50",
                     f"test accuracy {TEST_METRICS_05['acc']:.3f} · malignant F1 {TEST_METRICS_05['f1']:.3f}",
                     "accent-blue",
@@ -1830,14 +1831,14 @@ app_ui = ui.page_sidebar(
             ui.output_ui("coef_table"),
             ui.layout_columns(
                 ui.card(
-                    ui.card_header("Feature Selection — LASSO Regularisation"),
+                    ui.card_header("Feature Selection — LASSO Regularization"),
                     ui.tags.div(
                         ui.output_ui("fig_feat_sel"),
                         class_="figure-frame",
                     ),
                     ui.tags.p(
                         ui.tags.span("Figure 1", class_="fig-no"),
-                        " · LASSO regularisation path (A) and 5-fold "
+                        " · LASSO regularization path (A) and 5-fold "
                         "cross-validated AUC (B). λ₁ₛₑ retains "
                         f"{N_SEL} features (red dotted rule).",
                         class_="figure-caption",
@@ -1853,7 +1854,7 @@ app_ui = ui.page_sidebar(
                     ui.tags.p(
                         ui.tags.span("Figure 2", class_="fig-no"),
                         " · ROC curves on training and held-out test "
-                        "sets (A), and plain logistic-regression coefficients (B).",
+                        "sets (A), and unpenalized logistic-regression coefficients (B).",
                         class_="figure-caption",
                     ),
                     class_="equal-card",
@@ -2085,7 +2086,7 @@ def server(input, output, session):
             sign = "↑" if diff > 0 else ("↓" if diff < 0 else "—")
             col  = CLR_1SE if diff > 0 else CLR_TRAIN
             rows += (
-                f"<tr><td style='font-size:.72rem;'>{f}</td>"
+                f"<tr><td style='font-size:.72rem;'>{f.title()}</td>"
                 f"<td class='num'>{val:.4g}</td>"
                 f"<td class='num'>{med:.4g}</td>"
                 f"<td class='num' style='color:{col};font-weight:700;'>"
@@ -2095,13 +2096,13 @@ def server(input, output, session):
 <div style="overflow-x:auto;margin-top:4px;">
   <table class="tbl">
     <thead><tr>
-      <th>Feature</th><th>Value</th><th>Train Median</th><th>Δ</th>
+      <th>Feature</th><th>Value</th><th>Training Median</th><th>Δ</th>
     </tr></thead>
     <tbody>{rows}</tbody>
   </table>
 </div>
 <p style="font-size:.68rem;color:{_MUTED};margin-top:6px;">
-  A negative LR coefficient indicates that higher feature values are associated with malignancy.
+  In this model, a negative logistic-regression coefficient means that higher feature values are associated with a higher probability of malignancy.
 </p>
 """)
 
@@ -2125,12 +2126,12 @@ def server(input, output, session):
         df["P_malignant"] = p_malignant.round(4)
         df["P_benign"]    = p_benign.round(4)
         df["Prediction"]  = np.where(p_malignant >= 0.5, "Malignant", "Benign")
-        return df, f"OK — {len(df)} rows processed."
+        return df, f"Processed {len(df)} rows successfully."
 
     @render.ui
     def batch_status():
         _, msg = _batch_df()
-        ok  = msg and msg.startswith("OK")
+        ok  = msg and msg.startswith("Processed")
         col = CLR_BEN if ok else _MUTED
         return ui.HTML(
             f'<p style="font-size:.80rem;color:{col};margin:6px 0 0;">'
@@ -2215,7 +2216,7 @@ def server(input, output, session):
         return ui.HTML(f"""
 <div style="margin:8px 0 12px;">
   <p style="font-size:.70rem;color:{_MUTED};margin-bottom:6px;">
-    Threshold = {thr:.2f} · Positive = Malignant risk · Training set (n={N_TRAIN})
+    Threshold = {thr:.2f} · Positive class = Malignant · Training set (n={N_TRAIN})
   </p>
   <div class="cm-wrap">
     <div class="cm-corner"></div>
@@ -2224,20 +2225,20 @@ def server(input, output, session):
     <div class="cm-row-hdr">Actual<br>Malignant</div>
     <div class="cm-cell cm-tp">
       <span class="cm-n" style="color:{CLR_MAL};">{tp}</span>
-      <span class="cm-desc">True Positive<br>(detected malignant)</span>
+      <span class="cm-desc">True Positive<br>(malignancy correctly identified)</span>
     </div>
     <div class="cm-cell cm-fn">
       <span class="cm-n" style="color:{CLR_REF};">{fn}</span>
-      <span class="cm-desc">False Negative<br><b>missed cancer!</b></span>
+      <span class="cm-desc">False Negative<br><b>malignancy missed</b></span>
     </div>
     <div class="cm-row-hdr">Actual<br>Benign</div>
     <div class="cm-cell cm-fp">
       <span class="cm-n" style="color:{CLR_1SE};">{fp}</span>
-      <span class="cm-desc">False Positive<br>(benign flagged malignant)</span>
+      <span class="cm-desc">False Positive<br>(benign case flagged as malignant)</span>
     </div>
     <div class="cm-cell cm-tn">
       <span class="cm-n" style="color:{CLR_BEN};">{tn}</span>
-      <span class="cm-desc">True Negative<br>(correct benign)</span>
+      <span class="cm-desc">True Negative<br>(benign case correctly identified)</span>
     </div>
   </div>
 </div>
@@ -2251,11 +2252,11 @@ def server(input, output, session):
             f"<tr><td>{lbl}</td><td class='num'>{val:.4f}</td></tr>"
             for lbl, val in [
                 ("Accuracy",                           metrics["acc"]),
-                ("Sensitivity — Malignant detection",  metrics["sens"]),
-                ("Specificity — Benign exclusion",     metrics["spec"]),
-                ("PPV (Malignant precision)",          metrics["ppv"]),
-                ("NPV",                                metrics["npv"]),
-                ("F1 (Malignant)",                     metrics["f1"]),
+                ("Sensitivity (malignant cases)",      metrics["sens"]),
+                ("Specificity (benign cases)",         metrics["spec"]),
+                ("Positive predictive value",          metrics["ppv"]),
+                ("Negative predictive value",          metrics["npv"]),
+                ("F1 score (malignant class)",         metrics["f1"]),
             ]
         )
         return ui.HTML(f"""
@@ -2266,7 +2267,7 @@ def server(input, output, session):
   </table>
 </div>
 <p style="font-size:.72rem;color:{_MUTED};margin-top:6px;">
-  Evaluated on training set (n={N_TRAIN}). This threshold view treats malignancy as the positive class.
+  Evaluated on the training set (n={N_TRAIN}), with malignancy treated as the positive class.
 </p>
 """)
 
@@ -2305,22 +2306,23 @@ def server(input, output, session):
             )
         return ui.HTML(f"""
 <div class="card">
-  <div class="card-header">LASSO (Stage 1) vs. Plain LR (Stage 2) Coefficients</div>
+  <div class="card-header">LASSO (Stage 1) vs. Unpenalized Logistic Regression (Stage 2)</div>
   <div class="card-body">
     <div style="overflow-x:auto;">
       <table class="tbl">
         <thead><tr>
           <th>Feature</th>
           <th style="color:{CLR_1SE};">LASSO Coefficient (λ₁ₛₑ)</th>
-          <th style="color:{CLR_BEN};">Plain LR Coefficient</th>
+          <th style="color:{CLR_BEN};">Unpenalized Coefficient</th>
         </tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </div>
     <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-      LASSO coefficients are shrunk toward zero (biased). Plain LR on the same
-      {N_SEL} features provides unbiased estimates. A negative coefficient indicates that
-      higher feature values are associated with malignancy.
+      LASSO coefficients are shrunk toward zero. Refitting an unpenalized model on the
+      same {N_SEL} features reduces shrinkage and improves interpretability, but the
+      estimates remain conditional on data-driven feature selection. A negative coefficient
+      indicates that higher feature values are associated with malignancy.
     </p>
   </div>
 </div>
@@ -2330,21 +2332,24 @@ def server(input, output, session):
 
     @render.ui
     def perf_metrics_table():
-        hl_verdict = "good calibration" if HL_P >= 0.05 else "poor calibration"
+        hl_interpretation = (
+            "no evidence of lack of fit"
+            if HL_P >= 0.05 else "evidence of lack of fit"
+        )
         rows_html = "".join(
             f"<tr><td>{lbl}</td><td class='num'>{val:.4f}</td></tr>"
             for lbl, val in [
-                ("AUC (Train)",                   AUC_TRAIN),
-                ("AUC (Test)",                    AUC_TEST),
-                ("Brier Score (Train)",            BRIER_TRAIN),
-                ("Brier Score (Test)",             BRIER_TEST),
+                ("AUC (Training Set)",             AUC_TRAIN),
+                ("AUC (Test Set)",                 AUC_TEST),
+                ("Brier Score (Training Set)",     BRIER_TRAIN),
+                ("Brier Score (Test Set)",         BRIER_TEST),
                 ("Null Brier (prevalence model)",  NULL_BRIER),
                 ("Accuracy (threshold = 0.50)",    TEST_METRICS_05["acc"]),
-                ("Sensitivity — Malignant detection", TEST_METRICS_05["sens"]),
-                ("Specificity — Benign exclusion", TEST_METRICS_05["spec"]),
-                ("PPV (Malignant precision)",      TEST_METRICS_05["ppv"]),
-                ("NPV",                            TEST_METRICS_05["npv"]),
-                ("F1 (Malignant)",                 TEST_METRICS_05["f1"]),
+                ("Sensitivity (malignant cases)",  TEST_METRICS_05["sens"]),
+                ("Specificity (benign cases)",     TEST_METRICS_05["spec"]),
+                ("Positive predictive value",      TEST_METRICS_05["ppv"]),
+                ("Negative predictive value",      TEST_METRICS_05["npv"]),
+                ("F1 score (malignant class)",     TEST_METRICS_05["f1"]),
             ]
         )
         return ui.HTML(f"""
@@ -2358,10 +2363,10 @@ def server(input, output, session):
       <tbody>{rows_html}</tbody>
     </table>
     <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-      Brier score: mean squared error of probability predictions
-      (0 = perfect, 1 = worst; null model = {NULL_BRIER:.4f}).
+      The Brier score is the mean squared error of the probability predictions;
+      lower values are better (null model = {NULL_BRIER:.4f}).
       Hosmer-Lemeshow χ²={HL_CHI2:.2f}, p={HL_P:.3f}, df={HL_DF}
-      → {hl_verdict} (p≥0.05 indicates adequate calibration).
+      → {hl_interpretation}. A non-significant result does not prove good calibration.
     </p>
   </div>
 </div>
@@ -2371,21 +2376,28 @@ def server(input, output, session):
 
     @render.ui
     def methods_panel():
+        nonlinear_features = [
+            feature.title() for feature in SEL_COLS if not LRT[feature]["linear"]
+        ]
+        nonlinear_summary = ", ".join(nonlinear_features)
         lin_rows = "".join(
-            f"<tr><td><code>{f}</code></td>"
+            f"<tr><td>{f.title()}</td>"
             f"<td class='num'>{TRAIN_MEDIANS[f]:.4g}</td>"
             f"<td class='num'>{LRT[f]['chi2']:.2f}</td>"
             f"<td class='num'>{LRT[f]['p']:.3f}</td>"
-            f"<td>{'Linear ✓' if LRT[f]['linear'] else 'Non-linear ✗'}</td></tr>"
+            f"<td>{'No evidence of nonlinearity' if LRT[f]['linear'] else 'Evidence of nonlinearity'}</td></tr>"
             for f in SEL_COLS
         )
         vif_rows = "".join(
             f"<tr><td><code>{f}</code></td>"
             f"<td class='num'>{VIF[f]:.3f}</td>"
-            f"<td>{'<5 Acceptable' if VIF[f] < 5 else ('5–10 Moderate' if VIF[f] < 10 else '>10 Severe')}</td></tr>"
+            f"<td>{'Acceptable (<5)' if VIF[f] < 5 else ('Moderate (5–10)' if VIF[f] < 10 else 'Severe (>10)')}</td></tr>"
             for f in SEL_COLS
         )
-        hl_verdict = "good calibration" if HL_P >= 0.05 else "poor calibration"
+        hl_interpretation = (
+            "no evidence of lack of fit"
+            if HL_P >= 0.05 else "evidence of lack of fit"
+        )
         return ui.HTML(f"""
 <div class="methods">
 
@@ -2394,14 +2406,15 @@ def server(input, output, session):
     <div class="card-body" style="padding:14px!important;">
       <table class="tbl">
         <thead><tr>
-          <th>Feature</th><th>Train Median</th>
+          <th>Feature</th><th>Training Median</th>
           <th>LRT χ²</th><th>p-value</th><th>Decision</th>
         </tr></thead>
         <tbody>{lin_rows}</tbody>
       </table>
       <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-        LRT: linear logistic GLM vs cubic spline (sklearn SplineTransformer,
-        n_knots=2, degree=3, df_extra=3). Reject linearity at α=0.10.
+        The LRT compares a linear logistic GLM with a cubic-spline alternative
+        (sklearn SplineTransformer; n_knots=2, degree=3, df_extra=3).
+        Evidence against linearity is assessed at α = 0.10.
       </p>
     </div>
   </div>
@@ -2429,24 +2442,25 @@ def server(input, output, session):
       <table class="tbl">
         <thead><tr><th>Metric</th><th>Value</th></tr></thead>
         <tbody>
-          <tr><td>AUC (Train / Test)</td>
+          <tr><td>AUC (Training / Test)</td>
               <td class='num'>{AUC_TRAIN:.4f} / {AUC_TEST:.4f}</td></tr>
-          <tr><td>Brier Score (Train / Test)</td>
+          <tr><td>Brier Score (Training / Test)</td>
               <td class='num'>{BRIER_TRAIN:.4f} / {BRIER_TEST:.4f}</td></tr>
           <tr><td>Null Brier (prevalence model)</td>
               <td class='num'>{NULL_BRIER:.4f}</td></tr>
           <tr><td>Hosmer-Lemeshow χ² (df={HL_DF})</td>
               <td class='num'>{HL_CHI2:.2f}  p={HL_P:.3f}</td></tr>
           <tr><td>Accuracy</td><td class='num'>{TEST_METRICS_05["acc"]:.4f}</td></tr>
-          <tr><td>Sensitivity — Malignant detection</td><td class='num'>{TEST_METRICS_05["sens"]:.4f}</td></tr>
-          <tr><td>Specificity — Benign exclusion</td><td class='num'>{TEST_METRICS_05["spec"]:.4f}</td></tr>
-          <tr><td>PPV (Malignant precision)</td><td class='num'>{TEST_METRICS_05["ppv"]:.4f}</td></tr>
-          <tr><td>NPV</td><td class='num'>{TEST_METRICS_05["npv"]:.4f}</td></tr>
-          <tr><td>F1 (Malignant)</td><td class='num'>{TEST_METRICS_05["f1"]:.4f}</td></tr>
+          <tr><td>Sensitivity (malignant cases)</td><td class='num'>{TEST_METRICS_05["sens"]:.4f}</td></tr>
+          <tr><td>Specificity (benign cases)</td><td class='num'>{TEST_METRICS_05["spec"]:.4f}</td></tr>
+          <tr><td>Positive predictive value</td><td class='num'>{TEST_METRICS_05["ppv"]:.4f}</td></tr>
+          <tr><td>Negative predictive value</td><td class='num'>{TEST_METRICS_05["npv"]:.4f}</td></tr>
+          <tr><td>F1 score (malignant class)</td><td class='num'>{TEST_METRICS_05["f1"]:.4f}</td></tr>
         </tbody>
       </table>
       <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-        Calibration: HL test {hl_verdict} (χ²={HL_CHI2:.2f}, p={HL_P:.3f}).
+        Hosmer-Lemeshow test: {hl_interpretation}
+        (χ²={HL_CHI2:.2f}, p={HL_P:.3f}).
         Brier skill = 1 − Brier/NullBrier =
         {1 - BRIER_TEST/NULL_BRIER:.3f}.
       </p>
@@ -2457,45 +2471,47 @@ def server(input, output, session):
     <div class="card-header">Pipeline Description</div>
     <div class="card-body" style="padding:14px!important;">
       <h4>Dataset</h4>
-      <p>Wisconsin Breast Cancer Dataset (sklearn, n = {N_TOTAL}). Features: 30
-      nuclear morphology measurements derived from digitised fine-needle aspirate
-      images. Outcome: malignant (n = {n_malignant}) vs benign
-      (n = {n_benign}). 80/20 stratified train/test split
-      (random seed = 42).</p>
+      <p>The Wisconsin Diagnostic Breast Cancer dataset (sklearn; n = {N_TOTAL})
+      contains 30 nuclear-morphology measurements derived from digitized
+      fine-needle aspirate images. The outcome is malignant
+      (n = {n_malignant}) or benign (n = {n_benign}). Data were divided using an
+      80/20 stratified training/test split with random seed 42.</p>
 
       <h4>Scaling</h4>
-      <p>Features were scaled with RobustScaler (subtract median, divide by IQR),
-      fitted exclusively on the training set to prevent data leakage. RobustScaler is
-      preferred over StandardScaler given the right-skewed distributions typical of
-      nuclear morphology measurements.</p>
+      <p>Features were scaled with RobustScaler by subtracting the median and
+      dividing by the interquartile range. All scaling parameters were estimated
+      from the training set to prevent data leakage. RobustScaler was used because
+      several nuclear-morphology measurements are right-skewed.</p>
 
       <h4>Stage 1 — LASSO Feature Selection</h4>
-      <p>L1-penalised logistic regression (liblinear solver) evaluated over 60
+      <p>L1-penalized logistic regression (liblinear solver) was evaluated over 60
       log-spaced values of C ∈ [10⁻⁴, 10²] using 5-fold stratified
-      cross-validation (criterion: AUC). Feature selection follows the λ₁ₛₑ rule:
-      the most regularised model whose mean CV AUC remains within one standard
-      error of the best model. Result: {N_SEL} features selected at
-      C = {C_1SE:.5f}  (λ_min: {NZ_MIN} features at C = {C_MIN:.5f}).</p>
+      cross-validation with AUC as the selection criterion. The λ₁ₛₑ rule chooses
+      the most regularized model whose mean cross-validated AUC is within one
+      standard error of the maximum. This selected {N_SEL} features at
+      C = {C_1SE:.5f}; λ_min selected {NZ_MIN} features at C = {C_MIN:.5f}.</p>
 
-      <h4>Stage 2 — Plain Logistic Regression</h4>
-      <p>Unpenalised logistic regression (lbfgs solver) re-estimated on the
-      {N_SEL} LASSO-selected features. Refitting with plain LR removes L1
-      shrinkage bias and yields interpretable, unbiased coefficient estimates.
-      All features are entered on the RobustScaler-transformed scale without
-      further transformation.</p>
+      <h4>Stage 2 — Unpenalized Logistic Regression</h4>
+      <p>An unpenalized logistic regression model (lbfgs solver) was refit using
+      the {N_SEL} LASSO-selected features. This refit reduces L1 shrinkage and makes
+      the coefficients easier to interpret, although post-selection estimates may
+      still be optimistic. All features enter the model on the RobustScaler-transformed
+      scale without further transformation.</p>
 
       <h4>Model Diagnostics</h4>
       <p>Linearity was assessed via a likelihood-ratio test (LRT) comparing a
       linear logistic GLM against a cubic spline alternative (df_extra = 3).
-      All {N_SEL} selected features pass the linearity test at α = 0.10, supporting the
-      log-odds linearity assumption. Collinearity was quantified by the variance
+      At α = 0.10, {len(nonlinear_features)} features showed evidence of nonlinearity:
+      {nonlinear_summary}. These findings should be considered when interpreting the
+      current linear refit. Collinearity was quantified by the variance
       inflation factor (VIF = 1 / (1 − R²)), computed on the scaled training set.</p>
 
       <h4>Calibration</h4>
       <p>The Hosmer-Lemeshow test (10 quantile-based risk groups, df = {HL_DF})
-      yields χ² = {HL_CHI2:.2f}, p = {HL_P:.3f} → {hl_verdict}. The Brier score
-      on the test set is {BRIER_TEST:.4f}, compared with the null (prevalence-based)
-      model score of {NULL_BRIER:.4f}, giving a Brier skill score of
+      yielded χ² = {HL_CHI2:.2f}, p = {HL_P:.3f}, indicating
+      {hl_interpretation}. A non-significant result does not establish good calibration.
+      The test-set Brier score is {BRIER_TEST:.4f}, compared with
+      {NULL_BRIER:.4f} for the prevalence-only model, giving a Brier skill score of
       {1 - BRIER_TEST/NULL_BRIER:.3f}.</p>
     </div>
   </div>

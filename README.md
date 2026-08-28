@@ -1,6 +1,6 @@
-# Breast Cancer Diagnosis Command Center
+# Breast Cancer Classification Dashboard
 
-An interactive [Shiny for Python](https://shiny.posit.co/py/) dashboard for transparent breast cancer classification with a two-stage LASSO and logistic regression workflow.
+An interactive [Shiny for Python](https://shiny.posit.co/py/) dashboard for breast cancer classification using a two-stage LASSO and unpenalized logistic-regression workflow.
 
 [Open the live application](https://medictio.shinyapps.io/breast-cancer-classifier/)
 
@@ -9,7 +9,7 @@ An interactive [Shiny for Python](https://shiny.posit.co/py/) dashboard for tran
 
 ## Application preview
 
-![Breast cancer diagnosis dashboard](assets/breast_cancer_app.png)
+![Breast cancer classification dashboard](assets/breast_cancer_app.png)
 
 ## Overview
 
@@ -18,9 +18,9 @@ The application uses the [Wisconsin Diagnostic Breast Cancer dataset](https://ar
 The dashboard provides:
 
 - single-case prediction with editable feature values;
-- explicit malignant and benign probabilities;
+- estimated probabilities for the malignant and benign classes;
 - batch CSV scoring and export;
-- an interactive decision-threshold laboratory;
+- interactive decision-threshold analysis;
 - train/test ROC, calibration, and classification metrics;
 - LASSO paths, selected coefficients, linearity checks, and VIF diagnostics;
 - a global visitor map with aggregate usage statistics; and
@@ -79,7 +79,7 @@ p_benign = pipe_lr.predict_proba(X)[:, 1]
 p_malignant = 1.0 - p_benign
 ```
 
-At the default threshold, a case is classified as malignant when `P(malignant) >= 0.50`. The Threshold Lab allows this operating cutoff to be explored interactively.
+At the default threshold, a case is classified as malignant when `P(malignant) >= 0.50`. The Decision Threshold tab allows this operating cutoff to be explored interactively.
 
 ## Current bundle performance
 
@@ -115,9 +115,9 @@ Panel A compares the train and held-out test ROC curves. Panel B shows train/tes
 
 #### LASSO feature selection
 
-Panel A shows the regularisation paths, and Panel B shows the five-fold cross-validation AUC used by the lambda-1SE selection rule.
+Panel A shows the regularization paths, and Panel B shows the five-fold cross-validation AUC used by the lambda-1SE selection rule.
 
-![LASSO regularisation paths and cross-validation AUC](assets/model_feature_selection.png)
+![LASSO regularization paths and cross-validation AUC](assets/model_feature_selection.png)
 
 #### Functional-form diagnostics
 
