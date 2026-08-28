@@ -20,8 +20,8 @@
   --success: #34726B;
   --success-soft: #EAF3F1;
   --warning-soft: #F7F1E8;
-  --r: 10px;
-  --rs: 7px;
+  --r: 4px;
+  --rs: 3px;
   --font: 'Arial', 'Helvetica Neue', Helvetica, 'Liberation Sans', 'DejaVu Sans', sans-serif;
 }
 
@@ -62,7 +62,7 @@ body {
   width: 9px;
   height: 9px;
   margin-right: .65rem;
-  border-radius: 2px;
+  border-radius: 1px;
   background: var(--accent);
   content: '';
   box-shadow: 0 0 0 3px rgba(75, 95, 143, .11);
@@ -188,7 +188,7 @@ body {
 .irs-handle.state_hover { transform: scale(1.06) !important; }
 .irs-single {
   padding: 4px 9px;
-  border-radius: 4px;
+  border-radius: 2px;
   background: var(--accent) !important;
   color: #FFFFFF;
   font-size: .78rem;
@@ -206,7 +206,7 @@ body {
   padding: 24px 24px 17px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 4px;
   background: linear-gradient(135deg, #FFFFFF 0%, #F5F7FB 100%);
   box-shadow: 0 8px 24px rgba(24, 34, 53, .07);
 }
@@ -251,7 +251,7 @@ body {
   width: 3.4rem;
   height: 3px;
   margin-top: .58rem;
-  border-radius: 999px;
+  border-radius: 1px;
   background: var(--accent-bright);
   content: '';
 }
@@ -453,7 +453,7 @@ body {
   max-width: 100% !important;
   max-height: 100% !important;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 3px;
   object-fit: contain !important;
 }
 .figure-caption,
@@ -477,9 +477,9 @@ body {
 .prob-gauge { padding: 1rem 0 .85rem; text-align: center; }
 .prob-num { font-size: clamp(2.3rem, 3.4vw, 3rem); font-weight: 800; line-height: 1; }
 .prob-label { margin-top: .4rem; color: var(--muted); font-size: .8rem; }
-.prob-bar-wrap { height: 10px; margin: 14px 22px 10px; overflow: hidden; border-radius: 999px; background: var(--accent-soft); }
-.prob-bar-fill { height: 100%; border-radius: 999px; transition: width .3s; }
-.class-badge { display: inline-block; margin-top: 10px; padding: .48rem 1.15rem; border-radius: 999px; font-size: .81rem; font-weight: 800; letter-spacing: .2px; }
+.prob-bar-wrap { height: 10px; margin: 14px 22px 10px; overflow: hidden; border-radius: 2px; background: var(--accent-soft); }
+.prob-bar-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+.class-badge { display: inline-block; margin-top: 10px; padding: .48rem 1.15rem; border-radius: 3px; font-size: .81rem; font-weight: 800; letter-spacing: .2px; }
 
 .cm-wrap { display: grid; grid-template-columns: 130px 1fr 1fr; grid-template-rows: 44px 1fr 1fr; gap: 8px; margin: 10px 0; }
 .cm-corner { background: transparent; }
