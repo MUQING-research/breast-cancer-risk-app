@@ -46,10 +46,12 @@ class ModelContractTests(unittest.TestCase):
         raw_train = X_train[model.SEL_COLS].to_numpy()
         independently_fitted = clone(design).fit(raw_train)
         expected_design = independently_fitted.transform(raw_train)
-        np.testing.assert_allclose(design.transform(raw_train), expected_design)
+        # Independently optimized power transforms differ slightly across platforms.
+        np.testing.assert_allclose(
+            design.transform(raw_train), expected_design, rtol=1e-7, atol=1e-8)
         np.testing.assert_allclose(
             model.pipe_lr.named_steps["scaler"].center_,
-            np.median(expected_design, axis=0))
+            np.median(expected_design, axis=0), rtol=1e-7, atol=1e-8)
         fitted_before = pickle.dumps(model.pipe_lr)
         for frame, saved in ((X_train, model.PROB_TRAIN),
                              (X_test, model.PROB_TEST)):
