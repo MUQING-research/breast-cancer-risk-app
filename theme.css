@@ -681,6 +681,16 @@ body { height: auto; min-height: 100vh; }
   .prediction-results .chip:last-child { grid-column: 1 / -1; }
 }
 
+/* Restrained corners across chart, input and summary surfaces. */
+.hero-banner, .summary-tile, .input-panel, .card, .card-header,
+.chart-toolbar, .detail-panel, .metric-chip, .chip {
+  border-radius: 2px !important;
+}
+.input-panel .form-control, .input-panel .form-select,
+.chart-toolbar .form-select, .btn-primary, .nav-pills .nav-link {
+  border-radius: 3px !important;
+}
+
 /* Compact content rhythm: remove repeated summaries and unused figure gutters. */
 .dashboard-shell { padding-top: 20px; padding-bottom: 24px; }
 .hero-banner { display: grid; grid-template-columns: minmax(300px, .95fr) minmax(0, 1.8fr); align-items: center; gap: 22px; padding: 18px 20px; margin-bottom: 14px; }
