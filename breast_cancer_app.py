@@ -1869,10 +1869,10 @@ app_ui = ui.page_fluid(
                     ui.input_file("batch_file", None,
                                   accept=[".csv"],
                                   placeholder="Choose CSV file…"),
-                    ui.tags.p(
-                        "CSV must contain columns: " +
-                        ", ".join(f'"{c}"' for c in SEL_COLS),
-                        style=f"font-size:.76rem;color:{_MUTED};margin:6px 0 0;",
+                    ui.tags.p("Required column names", class_="input-group-label"),
+                    ui.tags.ul(
+                        *[ui.tags.li(ui.tags.code(c)) for c in SEL_COLS],
+                        class_="batch-schema",
                     ),
                     ui.output_ui("batch_status"),
                     ui.download_button("batch_download", "Download Predictions",
@@ -1929,7 +1929,7 @@ app_ui = ui.page_fluid(
                     ui.output_ui("cm_display"),
                     class_="equal-card",
                 ),
-                col_widths=[7, 5],
+                col_widths=[6, 6],
             ),
             ui.card(
                 ui.card_header("Performance at the Selected Threshold"),
@@ -2227,9 +2227,16 @@ def server(input, output, session):
     def batch_table():
         df, msg = _batch_df()
         if df is None:
-            return ui.HTML(
-                f'<p style="color:{_MUTED};font-size:.82rem;padding:8px;">'
-                "Upload a valid CSV file to see predictions.</p>"
+            return ui.tags.div(
+                ui.tags.h4("Your prediction preview will appear here"),
+                ui.tags.p("Upload a CSV with the seven required measurements. "
+                          "Validation messages appear beside the upload control."),
+                ui.tags.ol(
+                    ui.tags.li("Match the required column names exactly."),
+                    ui.tags.li("Review the first 20 scored rows."),
+                    ui.tags.li("Download the complete prediction file."),
+                ),
+                class_="batch-empty",
             )
         show = df.head(20)
         cols = list(show.columns)
@@ -2496,8 +2503,8 @@ def server(input, output, session):
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-header">Collinearity Assessment (VIF)</div>
+  <details class="detail-panel">
+    <summary>Collinearity Assessment (VIF) - all 28 design terms</summary>
     <div class="card-body" style="padding:14px!important;">
       <table class="tbl">
         <thead><tr>
@@ -2513,7 +2520,7 @@ def server(input, output, session):
         should not be interpreted as effects of a one-unit change in the raw input.
       </p>
     </div>
-  </div>
+  </details>
 
   <div class="card" style="margin-bottom:14px;">
     <div class="card-header">Model Performance — Train / Test (threshold = 0.50)</div>
@@ -2550,20 +2557,25 @@ def server(input, output, session):
 
   <div class="card">
     <div class="card-header">Pipeline Description</div>
-    <div class="card-body" style="padding:14px!important;">
+    <div class="card-body method-narrative" style="padding:14px!important;">
+      <section class="method-section">
       <h4>Dataset</h4>
       <p>The Wisconsin Diagnostic Breast Cancer dataset (sklearn; n = {N_TOTAL})
       contains 30 nuclear-morphology measurements derived from digitized
       fine-needle aspirate images. The outcome is malignant
       (n = {n_malignant}) or benign (n = {n_benign}). Data were divided using an
       80/20 stratified training/test split with random seed 42.</p>
+      </section>
 
+      <section class="method-section">
       <h4>Scaling</h4>
       <p>Features were scaled with RobustScaler by subtracting the median and
       dividing by the interquartile range. All scaling parameters were estimated
       from the training set to prevent data leakage. RobustScaler was used because
       several nuclear-morphology measurements are right-skewed.</p>
+      </section>
 
+      <section class="method-section">
       <h4>Stage 1 — LASSO Feature Selection</h4>
       <p>L1-penalized logistic regression (liblinear solver) was evaluated over 60
       log-spaced values of C ∈ [10⁻⁴, 10²] using 5-fold stratified
@@ -2573,7 +2585,9 @@ def server(input, output, session):
       the most regularized model whose mean cross-validated AUC is within one
       standard error of the maximum. This selected {N_SEL} features at
       C = {C_1SE:.5f}; λ_min selected {NZ_MIN} features at C = {C_MIN:.5f}.</p>
+      </section>
 
+      <section class="method-section">
       <h4>Stage 2 — Unpenalized Logistic Regression</h4>
       <p>An unpenalized logistic regression model (lbfgs solver) was refit using
       {len(DESIGN_COLS)} design terms derived from the {N_SEL} LASSO-selected inputs.
@@ -2581,7 +2595,9 @@ def server(input, output, session):
       GAM rule selects linear, centred quadratic, or cubic-spline forms.
       The resulting design is robust-scaled before fitting. Basis coefficients
       describe the transformed design and are not raw-input effect estimates.</p>
+      </section>
 
+      <section class="method-section">
       <h4>Model Diagnostics</h4>
       <p>Linearity was assessed via a likelihood-ratio test (LRT) comparing a
       linear logistic GLM against a cubic spline alternative (df_extra = 3).
@@ -2590,11 +2606,13 @@ def server(input, output, session):
       used to select the applied functional forms. Preprocessing decisions and
       fitted knots are recorded in eda_decisions.json. The VIF plot describes raw
       inputs; the table above describes all fitted design terms.</p>
+      </section>
       <p>The flexible, unpenalized refit shows a training-to-test calibration gap.
       Apparent performance after selection is optimistic. These results have not
       been externally validated, and the held-out test set was not used to tune
       the model.</p>
 
+      <section class="method-section">
       <h4>Calibration</h4>
       <p>The Hosmer-Lemeshow test (10 quantile-based risk groups, df = {HL_DF})
       yielded χ² = {HL_CHI2:.2f}, p = {HL_P:.3f}, indicating
@@ -2602,6 +2620,7 @@ def server(input, output, session):
       The test-set Brier score is {BRIER_TEST:.4f}, compared with
       {NULL_BRIER:.4f} for the prevalence-only model, giving a Brier skill score of
       {1 - BRIER_TEST/NULL_BRIER:.3f}.</p>
+      </section>
     </div>
   </div>
 
