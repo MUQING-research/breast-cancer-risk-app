@@ -14,6 +14,7 @@ APP_ID = "17579058"
 ROOT = Path(__file__).resolve().parent
 RUNTIME_FILES = (
     "app.py",
+    "chart_views.py",
     "breast_cancer_app.py",
     "bc_bundle.pkl",
     "eda_decisions.json",

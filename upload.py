@@ -10,6 +10,7 @@ from huggingface_hub import CommitOperationAdd, HfApi
 REPO_ID = "muqing-research/breast-cancer-classification"
 FILES = (
     "app.py",
+    "chart_views.py",
     "breast_cancer_app.py",
     "bc_bundle.pkl",
     "eda_decisions.json",

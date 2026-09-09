@@ -821,11 +821,13 @@ def _make_vif_fig():
     return _autoscale(fig)
 
 
-# Pre-render static figures once per process and embed as data URIs
-_FEAT_SEL_SRC = _fig_buf(_make_feat_sel_fig())
-_PERF_SRC     = _fig_buf(_make_perf_fig())
-_LIN_SRC      = _fig_buf(_make_linearity_fig())
-_VIF_SRC      = _fig_buf(_make_vif_fig())
+# Keep offline report renderers separate from responsive application views.
+import chart_views as charts
+
+_PERF_SRC = charts.png(charts.roc_figure(globals()))
+_CALIBRATION_SRC = charts.png(charts.calibration_figure(globals()))
+_CV_SRC = charts.png(charts.cv_figure(globals()))
+_VIF_SRC = charts.png(charts.vif_figure(globals()))
 print("  Static figures rendered.", flush=True)
 
 
@@ -1713,42 +1715,31 @@ def _note_block(title: str, copy: str) -> ui.Tag:
     )
 
 
-app_ui = ui.page_sidebar(
-    ui.sidebar(
-        ui.tags.div("Prediction Inputs", class_="sec"),
-        *_make_inputs(),
-        ui.input_action_button(
-            "submit", "Run Prediction",
-            class_="btn btn-primary w-100",
-            style="margin-top:10px;font-weight:600;",
-        ),
-        ui.tags.div("Model Summary", class_="sec"),
-        ui.tags.div(
-            ui.tags.span("■ Unpenalized Logistic Regression",
-                         style=f"color:{CLR_BEN};font-weight:600;font-size:.80rem;"),
-            style="line-height:2;",
-        ),
-        ui.tags.p(
-            f"Training {N_TRAIN} · Test {N_TEST} · {N_SEL} selected features",
-            style=f"font-size:.72rem;color:{_MUTED};margin:4px 0 0;",
-        ),
-        width=300,
-    ),
+def _input_panel():
+    fields = _make_inputs()
+    return ui.tags.aside(
+        ui.tags.div("CASE INPUTS", class_="input-eyebrow"),
+        ui.tags.h4("Describe the sample", class_="input-title"),
+        ui.tags.p("Start with training medians, then enter this sample's measurements.",
+                  class_="input-copy"),
+        ui.tags.div("Size & texture", class_="input-group-label"),
+        ui.tags.div(*fields[:3], class_="input-grid"),
+        ui.tags.div("Shape & surface", class_="input-group-label"),
+        ui.tags.div(*fields[3:], class_="input-grid"),
+        ui.input_action_button("submit", "Run Prediction", class_="btn btn-primary w-100"),
+        ui.tags.p("Inputs are applied when you run the prediction.", class_="input-hint"),
+        class_="input-panel", **{"aria-label": "Prediction inputs"},
+    )
 
+
+app_ui = ui.page_fluid(
     ui.tags.style(_CSS),
     ui.tags.div(
         ui.tags.div(
             ui.tags.div("Clinical prediction dashboard", class_="hero-kicker"),
-            ui.tags.h3(
-                "Breast Cancer Classification Dashboard",
-                class_="page-title",
-            ),
+            ui.tags.h3("Breast Cancer Classification", class_="page-title"),
             ui.tags.p(
-                f"Wisconsin Diagnostic Breast Cancer dataset · N = {N_TOTAL} · "
-                f"LASSO selected {N_SEL} of {len(FEAT_NAMES)} features using the λ₁ₛₑ rule, "
-                f"followed by an unpenalized logistic regression refit. "
-                f"Held-out AUC = {AUC_TEST:.3f} · Brier score = {BRIER_TEST:.3f} · "
-                f"stratified split: {N_TRAIN} training / {N_TEST} test cases.",
+                "Wisconsin Diagnostic Breast Cancer | Seven selected inputs with training-only preprocessing.",
                 class_="page-subtitle",
             ),
             class_="hero-copy",
@@ -1791,8 +1782,11 @@ app_ui = ui.page_sidebar(
                 "Case-level malignancy estimate",
                 "Enter the retained feature values to estimate malignancy probability and compare each value with its training-set median.",
             ),
-            ui.output_ui("pred_chips"),
-            ui.layout_columns(
+            ui.tags.div(
+                _input_panel(),
+                ui.tags.div(
+                    ui.output_ui("pred_chips"),
+                    ui.layout_columns(
                 ui.card(
                     ui.card_header("Estimated Probability of Malignancy"),
                     ui.tags.div(
@@ -1807,6 +1801,10 @@ app_ui = ui.page_sidebar(
                     class_="equal-card",
                 ),
                 col_widths=[5, 7],
+                    ),
+                    class_="prediction-results",
+                ),
+                class_="prediction-workspace",
             ),
             ui.tags.div(
                 _note_block(
@@ -1823,11 +1821,13 @@ app_ui = ui.page_sidebar(
                 ),
                 class_="note-grid",
             ),
-            ui.layout_columns(
+            ui.tags.details(
+                ui.tags.summary("Visitor activity"),
+                ui.layout_columns(
                 ui.card(
                     ui.card_header("Global Visitor Map"),
                     ui.tags.div(
-                        ui.output_plot("visit_map", width="100%", height="100%"),
+                        ui.output_ui("visit_map"),
                         class_="plot-frame plot-map",
                     ),
                     class_="equal-card",
@@ -1838,6 +1838,8 @@ app_ui = ui.page_sidebar(
                     class_="equal-card",
                 ),
                 col_widths=[8, 4],
+                ),
+                class_="detail-panel",
             ),
             ui.tags.p(
                 f"Predictions use {N_SEL} LASSO-selected features and RobustScaler parameters "
@@ -1918,8 +1920,8 @@ app_ui = ui.page_sidebar(
                 ui.card(
                     ui.card_header("Training Set — Predicted Probability Distribution"),
                     ui.tags.div(
-                        ui.output_plot("hist_img", width="100%", height="100%"),
-                        class_="plot-frame plot-wide",
+                        ui.output_ui("hist_img"),
+                        class_="chart-image chart-square",
                     ),
                     class_="equal-card",
                 ),
@@ -1950,97 +1952,51 @@ app_ui = ui.page_sidebar(
                 "Selection, performance, calibration, and diagnostics",
                 "Review held-out performance, selected coefficients, and the diagnostic figures stored with the deployed model bundle.",
             ),
-            ui.tags.div(
-                _summary_tile(
-                    "λ₁ₛₑ",
-                    f"{C_1SE:.4g}",
-                    f"{N_SEL} retained / {len(FEAT_NAMES)} raw features",
-                    "accent-crimson",
+            ui.navset_pill(
+                ui.nav_panel(
+                    "Performance",
+                    ui.tags.div(
+                        ui.card(ui.tags.div(ui.output_ui("fig_perf"), class_="chart-image chart-square")),
+                        ui.card(ui.tags.div(ui.output_ui("fig_calibration"), class_="chart-image chart-square")),
+                        class_="chart-grid",
+                    ),
+                    ui.output_ui("perf_metrics_table"),
                 ),
-                _summary_tile(
-                    "Brier skill score",
-                    f"{1 - BRIER_TEST / NULL_BRIER:.3f}",
-                    f"test Brier {BRIER_TEST:.3f} vs null {NULL_BRIER:.3f}",
-                    "accent-teal",
+                ui.nav_panel(
+                    "Feature selection",
+                    ui.tags.div(
+                        ui.input_select("path_feature", "Inspect a retained input",
+                                        {f: f.title() for f in SEL_COLS}, selected=SEL_COLS[0]),
+                        class_="chart-toolbar",
+                    ),
+                    ui.tags.div(
+                        ui.card(
+                            ui.tags.div(ui.output_ui("fig_feat_sel"), class_="chart-image chart-square"),
+                        ),
+                        ui.card(ui.tags.div(ui.output_ui("fig_cv"), class_="chart-image chart-square")),
+                        class_="chart-grid",
+                    ),
                 ),
-                _summary_tile(
-                    "Classification rule",
-                    "P(malignant) >= 0.50",
-                    f"test accuracy {TEST_METRICS_05['acc']:.3f} · malignant F1 {TEST_METRICS_05['f1']:.3f}",
-                    "accent-blue",
+                ui.nav_panel(
+                    "Diagnostics",
+                    ui.tags.div(
+                        ui.input_select("linearity_feature", "Inspect a retained input",
+                                        {f: f.title() for f in SEL_COLS}, selected=SEL_COLS[0]),
+                        class_="chart-toolbar",
+                    ),
+                    ui.tags.div(
+                        ui.card(
+                            ui.tags.div(ui.output_ui("fig_linearity"), class_="chart-image chart-square"),
+                        ),
+                        ui.card(ui.tags.div(ui.output_ui("fig_vif"), class_="chart-image chart-square")),
+                        class_="chart-grid",
+                    ),
                 ),
-                _summary_tile(
-                    "Split",
-                    f"{N_TRAIN} / {N_TEST}",
-                    "train / test cases, stratified",
-                    "accent-salmon",
-                ),
-                class_="summary-grid",
+                id="evaluation_view",
             ),
-            ui.output_ui("perf_metrics_table"),
-            ui.output_ui("coef_table"),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Feature Selection — LASSO Regularization"),
-                    ui.tags.div(
-                        ui.output_ui("fig_feat_sel"),
-                        class_="figure-frame",
-                    ),
-                    ui.tags.p(
-                        ui.tags.span("Figure 1", class_="fig-no"),
-                        " · LASSO regularization path (A) and 5-fold "
-                        "cross-validated AUC (B). λ₁ₛₑ retains "
-                        f"{N_SEL} features (red dotted rule).",
-                        class_="figure-caption",
-                    ),
-                    class_="equal-card",
-                ),
-                ui.card(
-                    ui.card_header("Model Performance"),
-                    ui.tags.div(
-                        ui.output_ui("fig_perf"),
-                        class_="figure-frame",
-                    ),
-                    ui.tags.p(
-                        ui.tags.span("Figure 2", class_="fig-no"),
-                        " · ROC curves on training and held-out test "
-                        "sets (A), and training/test calibration curves (B).",
-                        class_="figure-caption",
-                    ),
-                    class_="equal-card",
-                ),
-                col_widths=[6, 6],
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Linearity Assessment (LRT, α = 0.10)"),
-                    ui.tags.div(
-                        ui.output_ui("fig_linearity"),
-                        class_="figure-frame figure-frame-wide",
-                    ),
-                    ui.tags.p(
-                        ui.tags.span("Figure 3", class_="fig-no"),
-                        " · Log-odds linearity check for each retained "
-                        "feature: binned empirical log-odds versus the linear fit.",
-                        class_="figure-caption",
-                    ),
-                    class_="equal-card",
-                ),
-                ui.card(
-                    ui.card_header("Collinearity (VIF)"),
-                    ui.tags.div(
-                        ui.output_ui("fig_vif"),
-                        class_="figure-frame figure-frame-wide",
-                    ),
-                    ui.tags.p(
-                        ui.tags.span("Figure 4", class_="fig-no"),
-                        " · Variance inflation factors on the scaled "
-                        "training matrix (VIF = 1/(1−R²)); rules at 5 and 10.",
-                        class_="figure-caption",
-                    ),
-                    class_="equal-card",
-                ),
-                col_widths=[7, 5],
+            ui.tags.details(
+                ui.tags.summary(f"Inspect all {len(DESIGN_COLS)} fitted coefficients"),
+                ui.output_ui("coef_table"), class_="detail-panel",
             ),
         ),
 
@@ -2058,7 +2014,7 @@ app_ui = ui.page_sidebar(
     ),
 
     title="Breast Cancer Dashboard",
-    fillable=True,
+    class_="dashboard-shell",
 )
 
 
@@ -2109,12 +2065,16 @@ def server(input, output, session):
         _refresh_tick.get()  # re-fetch when the tick advances
         return _fetch_visits_bc()
 
-    @render.plot(alt="Global visitor map")
+    @render.ui
     def visit_map():
-        return _make_visit_map_bc(
+        fig = _make_visit_map_bc(
             _visits(), _user_loc["lat"], _user_loc["lon"],
             _ANALYTICS_STATE["mode"],
         )
+        fig.set_size_inches(7, 3.5)
+        fig.axes[0].set_title("Global visitor activity", loc="left", fontsize=10, fontweight="bold")
+        charts.finish(fig, "Source: app visit logs. Locations are approximate; unavailable locations are omitted.")
+        return ui.tags.img(src=charts.png(fig), alt="Aggregate visitor locations on a world map")
 
     @render.ui
     def visit_stats():
@@ -2343,26 +2303,12 @@ def server(input, output, session):
 
     # ── Decision threshold ────────────────────────────────────────────────────
 
-    @render.plot(alt="Predicted probability distribution by class")
+    @render.ui
     def hist_img():
-        thr  = float(input.threshold())
-        p_malignant = 1.0 - PROB_TRAIN
-        fig, ax = plt.subplots(figsize=(7.0, 3.5))
-        _style_axis(ax)
-        _grid_light(ax)
-        bins = np.linspace(0, 1, 26)
-        ax.hist(p_malignant[y_tr == 0], bins=bins, color=CLR_MAL, alpha=0.65,
-                label="Malignant", edgecolor="none")
-        ax.hist(p_malignant[y_tr == 1], bins=bins, color=CLR_BEN, alpha=0.65,
-                label="Benign",    edgecolor="none")
-        ax.axvline(thr, color=_INK_BC, lw=1.0, ls="--",
-                   label=f"Threshold = {thr:.2f}", zorder=3)
-        ax.set_xlabel("P(Malignant)")
-        ax.set_ylabel("Count")
-        ax.set_xlim(0, 1)
-        ax.legend(fontsize=7.5, frameon=False, loc="upper center", ncol=3)
-        fig.tight_layout(pad=0.8)
-        return fig
+        return ui.tags.img(
+            src=charts.png(charts.threshold_figure(globals(), float(input.threshold()))),
+            alt="Training probabilities by true class with the selected malignancy cutoff",
+        )
 
     @render.ui
     def cm_display():
@@ -2430,7 +2376,9 @@ def server(input, output, session):
 
     @render.ui
     def fig_feat_sel():
-        return ui.tags.img(src=_FEAT_SEL_SRC, alt="Feature Selection")
+        feature = input.path_feature() or SEL_COLS[0]
+        return ui.tags.img(src=charts.png(charts.path_figure(globals(), feature)),
+                           alt=f"LASSO coefficient path for {feature}")
 
     @render.ui
     def fig_perf():
@@ -2438,7 +2386,17 @@ def server(input, output, session):
 
     @render.ui
     def fig_linearity():
-        return ui.tags.img(src=_LIN_SRC, alt="Linearity Assessment")
+        feature = input.linearity_feature() or SEL_COLS[0]
+        return ui.tags.img(src=charts.png(charts.linearity_figure(globals(), feature)),
+                           alt=f"GAM functional-form diagnostic for {feature}")
+
+    @render.ui
+    def fig_calibration():
+        return ui.tags.img(src=_CALIBRATION_SRC, alt="Training and test probability calibration")
+
+    @render.ui
+    def fig_cv():
+        return ui.tags.img(src=_CV_SRC, alt="Training five-fold cross-validation AUC and one-SE rule")
 
     @render.ui
     def fig_vif():
@@ -2455,28 +2413,26 @@ def server(input, output, session):
             rc  = LR_COEF[i]
             rows += (
                 f"<tr><td>{f}</td>"
-                "<td class='num'>Not applicable</td>"
                 f"<td class='num' style='color:{CLR_BEN};'>{rc:+.4f}</td></tr>"
             )
         return ui.HTML(f"""
 <div class="card">
-  <div class="card-header">LASSO (Stage 1) vs. Unpenalized Logistic Regression (Stage 2)</div>
+  <div class="card-header">Fitted Design-Matrix Coefficients</div>
   <div class="card-body">
     <div style="overflow-x:auto;">
       <table class="tbl">
         <thead><tr>
-          <th>Feature</th>
-          <th style="color:{CLR_1SE};">LASSO Coefficient (λ₁ₛₑ)</th>
+          <th>Design term</th>
           <th style="color:{CLR_BEN};">Unpenalized Coefficient</th>
         </tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </div>
     <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-      LASSO coefficients are shrunk toward zero. Refitting an unpenalized model on the
-      same {N_SEL} features reduces shrinkage and improves interpretability, but the
-      estimates remain conditional on data-driven feature selection. A negative coefficient
-      indicates that higher feature values are associated with malignancy.
+      These {len(DESIGN_COLS)} terms represent the fitted transformations of {N_SEL}
+      selected inputs. Coefficients are on the benign log-odds scale and are conditional
+      on feature selection. Individual spline coefficients are not standalone effects
+      of the original input.
     </p>
   </div>
 </div>
@@ -2490,30 +2446,29 @@ def server(input, output, session):
             "no evidence of lack of fit"
             if HL_P >= 0.10 else "evidence of lack of fit"
         )
+        training = _threshold_metrics(y_tr, PROB_TRAIN, 0.50)
         rows_html = "".join(
-            f"<tr><td>{lbl}</td><td class='num'>{val:.4f}</td></tr>"
-            for lbl, val in [
-                ("AUC (Training Set)",             AUC_TRAIN),
-                ("AUC (Test Set)",                 AUC_TEST),
-                ("Brier Score (Training Set)",     BRIER_TRAIN),
-                ("Brier Score (Test Set)",         BRIER_TEST),
-                ("Null Brier (prevalence model)",  NULL_BRIER),
-                ("Accuracy (threshold = 0.50)",    TEST_METRICS_05["acc"]),
-                ("Sensitivity (malignant cases)",  TEST_METRICS_05["sens"]),
-                ("Specificity (benign cases)",     TEST_METRICS_05["spec"]),
-                ("Positive predictive value",      TEST_METRICS_05["ppv"]),
-                ("Negative predictive value",      TEST_METRICS_05["npv"]),
-                ("F1 score (malignant class)",     TEST_METRICS_05["f1"]),
+            f"<tr><td>{label}</td><td class='num'>{train:.4f}</td>"
+            f"<td class='num'>{test:.4f}</td></tr>"
+            for label, train, test in [
+                ("AUC", AUC_TRAIN, AUC_TEST),
+                ("Brier score", BRIER_TRAIN, BRIER_TEST),
+                ("Accuracy", training["acc"], TEST_METRICS_05["acc"]),
+                ("Sensitivity", training["sens"], TEST_METRICS_05["sens"]),
+                ("Specificity", training["spec"], TEST_METRICS_05["spec"]),
+                ("Positive predictive value", training["ppv"], TEST_METRICS_05["ppv"]),
+                ("Negative predictive value", training["npv"], TEST_METRICS_05["npv"]),
+                ("F1 score", training["f1"], TEST_METRICS_05["f1"]),
             ]
         )
         return ui.HTML(f"""
 <div class="card" style="margin-top:10px;">
   <div class="card-header">
-    Model Performance Summary — Test Set (threshold = 0.50)
+    Model Performance | Train / Test (threshold = 0.50)
   </div>
   <div class="card-body">
     <table class="tbl">
-      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <thead><tr><th>Metric</th><th>Train (apparent)</th><th>Test (held-out)</th></tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
     <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
