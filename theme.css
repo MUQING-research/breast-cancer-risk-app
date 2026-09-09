@@ -419,13 +419,13 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: clamp(250px, 22vw, 340px);
+  height: clamp(220px, 18vw, 280px);
   padding: 8px;
   overflow: hidden;
   box-sizing: border-box;
 }
-.plot-frame.plot-map { height: clamp(240px, 28vw, 340px); }
-.plot-frame.plot-wide { height: clamp(320px, 36vw, 520px); }
+.plot-frame.plot-map { height: clamp(220px, 22vw, 280px); }
+.plot-frame.plot-wide { height: clamp(240px, 22vw, 320px); }
 .plot-frame .shiny-plot-output { width: 100% !important; height: 100% !important; }
 .plot-frame .shiny-plot-output img,
 .plot-frame .shiny-plot-output canvas {
@@ -441,11 +441,12 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: clamp(210px, 18vw, 300px);
+  height: clamp(190px, 15vw, 240px);
   padding: 8px;
   overflow: hidden;
   box-sizing: border-box;
 }
+.figure-frame.figure-frame-wide { height: clamp(250px, 22vw, 320px); }
 .figure-frame .shiny-html-output { display: flex; align-items: center; justify-content: center; width: 100% !important; height: 100% !important; }
 .figure-frame .shiny-html-output img {
   width: auto !important;
@@ -471,8 +472,8 @@ body {
 .plot-frame,
 .result-frame { flex: 1 1 auto; min-height: 0; }
 .result-frame { display: flex; flex-direction: column; justify-content: flex-start; }
-.result-frame.result-map { min-height: clamp(240px, 28vw, 340px); }
-.result-frame.result-gauge { min-height: clamp(260px, 26vw, 360px); }
+.result-frame.result-map { min-height: clamp(220px, 22vw, 280px); }
+.result-frame.result-gauge { min-height: clamp(220px, 20vw, 280px); }
 
 .prob-gauge { padding: 1rem 0 .85rem; text-align: center; }
 .prob-num { font-size: clamp(2.3rem, 3.4vw, 3rem); font-weight: 800; line-height: 1; }
@@ -493,6 +494,15 @@ body {
 .cm-cell .cm-n { font-size: 1.6rem; font-weight: 800; line-height: 1.05; }
 .cm-cell .cm-desc { margin-top: 5px; color: var(--muted); font-size: .68rem; line-height: 1.35; }
 
+.threshold-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.threshold-metric {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--rs);
+  background: var(--surface);
+}
+.threshold-metric span { font-size: .72rem; color: var(--muted); line-height: 1.3; }
+.threshold-metric strong { font-size: .86rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+
 .methods h4 { margin: 16px 0 8px; padding-left: 10px; border-left: 3px solid var(--accent); color: var(--accent-ink); font-size: .68rem; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
 .methods p { margin: 0 0 12px; font-size: .82rem; line-height: 1.58; }
 
@@ -509,17 +519,19 @@ body {
   .hero-banner { padding: 20px 18px 15px; }
   .page-title { font-size: clamp(1.55rem, 7vw, 2rem); }
   .page-subtitle { font-size: .9rem; }
-  .plot-frame { height: clamp(220px, 60vw, 320px); }
-  .plot-frame.plot-map { height: clamp(220px, 60vw, 310px); }
-  .plot-frame.plot-wide { height: clamp(300px, 80vw, 460px); }
-  .figure-frame { height: clamp(200px, 58vw, 300px); }
-  .result-frame.result-map { min-height: clamp(220px, 60vw, 310px); }
-  .result-frame.result-gauge { min-height: clamp(230px, 60vw, 330px); }
+  .plot-frame { height: clamp(210px, 58vw, 290px); }
+  .plot-frame.plot-map { height: clamp(210px, 58vw, 290px); }
+  .plot-frame.plot-wide { height: clamp(230px, 68vw, 340px); }
+  .figure-frame { height: clamp(190px, 52vw, 260px); }
+  .figure-frame.figure-frame-wide { height: clamp(240px, 68vw, 340px); }
+  .result-frame.result-map { min-height: clamp(210px, 58vw, 290px); }
+  .result-frame.result-gauge { min-height: clamp(210px, 54vw, 280px); }
   .nav-tabs .nav-link { padding: .5rem .8rem !important; font-size: .74rem; }
   .cm-wrap { grid-template-columns: 96px 1fr 1fr; grid-template-rows: 38px 1fr 1fr; }
 }
 
 @media (max-width: 700px) {
+  .threshold-metric-grid { grid-template-columns: 1fr; }
   .summary-grid,
   .note-grid { grid-template-columns: 1fr; }
   .page-title { font-size: 1.42rem; }

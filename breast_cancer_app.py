@@ -16,6 +16,7 @@ import threading
 import time
 import warnings
 from collections import Counter
+from importlib.metadata import version
 
 import requests
 import matplotlib
@@ -31,10 +32,9 @@ from shiny import App, reactive, render, ui
 import json
 from pathlib import Path
 from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 from sklearn.preprocessing import RobustScaler, SplineTransformer
-from sklearn.linear_model import (LogisticRegression, LogisticRegressionCV,
-                                   LinearRegression)
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (roc_auc_score, accuracy_score, roc_curve,
                               confusion_matrix, f1_score, brier_score_loss)
@@ -46,26 +46,6 @@ if os.name == "nt":
     _TMP_ROOT = Path(__file__).parent / ".cache" / "tmp"
     _TMP_ROOT.mkdir(parents=True, exist_ok=True)
     tempfile.tempdir = str(_TMP_ROOT)
-
-    class _SafeTemporaryDirectory:
-        def __init__(self, suffix=None, prefix=None, dir=None,
-                     ignore_cleanup_errors=True):
-            self.name = tempfile.mkdtemp(
-                suffix=suffix or "",
-                prefix=prefix or "tmp",
-                dir=dir or str(_TMP_ROOT),
-            )
-
-        def __enter__(self):
-            return self.name
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def cleanup(self):
-            return None
-
-    tempfile.TemporaryDirectory = _SafeTemporaryDirectory
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 # Cell journal figure palette.
@@ -131,18 +111,55 @@ plt.rcParams.update({
 
 # ── 1. Model training ────────────────────────────────────────────────────────
 _BUNDLE_PATH = Path(__file__).parent / "bc_bundle.pkl"
+BUNDLE_SCHEMA_VERSION = 3
+
+
+def _threshold_metrics(y_true: np.ndarray, p_benign: np.ndarray,
+                       threshold: float = 0.5) -> dict[str, float]:
+    """Evaluate a decision rule with malignancy as the positive class."""
+    y_malignant = (np.asarray(y_true) == 0).astype(int)
+    p_malignant = 1.0 - np.asarray(p_benign, dtype=float)
+    pred_malignant = (p_malignant >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(
+        y_malignant, pred_malignant, labels=[0, 1]).ravel()
+    return {
+        "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
+        "acc": float((tp + tn) / len(y_malignant)),
+        "sens": float(tp / (tp + fn)) if tp + fn else 0.0,
+        "spec": float(tn / (tn + fp)) if tn + fp else 0.0,
+        "ppv": float(tp / (tp + fp)) if tp + fp else 0.0,
+        "npv": float(tn / (tn + fn)) if tn + fn else 0.0,
+        "f1": float(2 * tp / (2 * tp + fp + fn)) if 2 * tp + fp + fn else 0.0,
+    }
+
+
+def _lasso_cv_search(X, y, candidates, cv):
+    """Refit preprocessing inside every CV training fold."""
+    search = GridSearchCV(
+        Pipeline([
+            ("scaler", RobustScaler()),
+            ("lasso", LogisticRegression(
+                penalty="l1", solver="liblinear", max_iter=5000,
+                random_state=42)),
+        ]),
+        {"lasso__C": candidates}, cv=cv, scoring="roc_auc",
+        n_jobs=1, error_score="raise", refit=True,
+    )
+    return search.fit(X, y)
 
 
 def _hosmer_lemeshow(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10):
     """Hosmer-Lemeshow goodness-of-fit test (decile-of-risk)."""
-    q = np.percentile(y_prob, np.linspace(0, 100, n_bins + 1))
+    q = np.unique(np.percentile(y_prob, np.linspace(0, 100, n_bins + 1)))
     q[-1] += 1e-8
     bins = np.digitize(y_prob, q[1:-1])
     chi2 = 0.0
-    for b in range(n_bins):
+    n_groups = 0
+    for b in np.unique(bins):
         mask = bins == b
         if mask.sum() == 0:
             continue
+        n_groups += 1
         n_b  = mask.sum()
         obs  = float(y_true[mask].sum())
         exp  = float(y_prob[mask].sum())
@@ -152,8 +169,9 @@ def _hosmer_lemeshow(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10):
             chi2 += (obs - exp) ** 2 / exp
         if nexp > 1e-10:
             chi2 += (nobs - nexp) ** 2 / nexp
-    df = n_bins - 2
-    return float(chi2), float(1 - stats.chi2.cdf(chi2, df)), df
+    df = n_groups - 2
+    p_value = float(stats.chi2.sf(chi2, df)) if df > 0 else float("nan")
+    return float(chi2), p_value, df
 
 
 def _compute_vif(X_sc: np.ndarray, names: list[str]) -> dict[str, float]:
@@ -161,19 +179,19 @@ def _compute_vif(X_sc: np.ndarray, names: list[str]) -> dict[str, float]:
     for i, nm in enumerate(names):
         y_ = X_sc[:, i]
         X_ = np.delete(X_sc, i, axis=1)
-        r2 = LinearRegression().fit(X_, y_).score(X_, y_)
+        r2 = LinearRegression().fit(X_, y_).score(X_, y_) if X_.shape[1] else 0.0
         result[nm] = 1.0 / max(1e-10, 1.0 - r2)
     return result
 
 
 def _lrt_one(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-    x = x.reshape(-1, 1)
+    x = RobustScaler().fit_transform(np.asarray(x).reshape(-1, 1))
     m_lin = LogisticRegression(penalty=None, solver="lbfgs", max_iter=3000)
     m_lin.fit(x, y)
     p_lin = np.clip(m_lin.predict_proba(x)[:, 1], 1e-15, 1 - 1e-15)
     ll_lin = float(np.sum(y * np.log(p_lin) + (1 - y) * np.log(1 - p_lin)))
 
-    sp = SplineTransformer(n_knots=2, degree=3, include_bias=False)
+    sp = SplineTransformer(n_knots=3, degree=3, include_bias=False)
     Xs = sp.fit_transform(x)
     m_sp = LogisticRegression(penalty=None, solver="lbfgs", max_iter=3000)
     m_sp.fit(Xs, y)
@@ -181,19 +199,28 @@ def _lrt_one(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     ll_sp = float(np.sum(y * np.log(p_sp) + (1 - y) * np.log(1 - p_sp)))
 
     chi2 = max(0.0, 2 * (ll_sp - ll_lin))
-    df   = max(1, Xs.shape[1] - 1)
-    p    = float(1 - stats.chi2.cdf(chi2, df))
+    df = int(np.linalg.matrix_rank(np.column_stack([np.ones(len(x)), Xs]))
+             - np.linalg.matrix_rank(np.column_stack([np.ones(len(x)), x])))
+    p = float(stats.chi2.sf(chi2, df)) if df > 0 else 1.0
     return chi2, p
 
 
-def _train_and_build() -> dict:
+def _train_and_build(cleaned_table: pd.DataFrame | None = None) -> dict:
     """Train full pipeline; return bundle dict — no raw DataFrames."""
     _seed = 42
     np.random.seed(_seed)
 
     _data = load_breast_cancer()
-    X_all = pd.DataFrame(_data.data, columns=_data.feature_names)
-    y_all = pd.Series(_data.target, name="target")   # 0=malignant, 1=benign
+    if cleaned_table is None:
+        X_all = pd.DataFrame(_data.data, columns=_data.feature_names)
+        y_all = pd.Series(_data.target, name="target")
+    else:
+        X_all = cleaned_table[list(_data.feature_names)].copy()
+        y_all = cleaned_table["target"].copy()
+    if not np.isfinite(X_all.to_numpy(dtype=float)).all() or (X_all < 0).any().any():
+        raise ValueError("Training features must be finite, non-negative measurements.")
+    if set(y_all.unique()) != {0, 1}:
+        raise ValueError("Training target must use 0=malignant and 1=benign.")
     _n_malignant = int((y_all == 0).sum())
     _n_benign    = int((y_all == 1).sum())
 
@@ -206,19 +233,18 @@ def _train_and_build() -> dict:
     _N_TRAIN = len(_y_tr)
     _N_TEST  = len(_y_te)
 
+    from training_eda import screen_variables, make_design, export_diagnostics
+    _decisions, _all_plot_data, _summary = screen_variables(X_train, _y_tr)
+    _audit_dir = _BUNDLE_PATH.parent / ".cache" / "training"
+    export_diagnostics(X_train, _y_tr, _decisions, _all_plot_data, _summary, _audit_dir)
+
     # Stage 1 — LASSO with 5-fold CV
     _CS  = np.logspace(-4, 2, 60)
     _cv  = StratifiedKFold(n_splits=5, shuffle=True, random_state=_seed)
-    _pipe_cv = Pipeline([
-        ("scaler", RobustScaler()),
-        ("lasso",  LogisticRegressionCV(
-            Cs=_CS, penalty="l1", solver="liblinear",
-            cv=_cv, scoring="roc_auc", max_iter=5000, random_state=_seed,
-        )),
+    _search = _lasso_cv_search(X_train.values, _y_tr, _CS, _cv)
+    _cv_scores = np.asarray([
+        _search.cv_results_[f"split{i}_test_score"] for i in range(_cv.n_splits)
     ])
-    _pipe_cv.fit(X_train.values, _y_tr)
-
-    _cv_scores = list(_pipe_cv.named_steps["lasso"].scores_.values())[0]
     _mean_auc  = _cv_scores.mean(axis=0)
     _se_auc    = _cv_scores.std(axis=0, ddof=1) / np.sqrt(_cv_scores.shape[0])
     _idx_min   = int(np.argmax(_mean_auc))
@@ -226,7 +252,7 @@ def _train_and_build() -> dict:
     _thr_1se   = _mean_auc[_idx_min] - _se_auc[_idx_min]
     _idx_1se   = int(np.where(_mean_auc >= _thr_1se)[0][0])
     _c_1se     = _CS[_idx_1se]
-    _nz_min    = int((_pipe_cv.named_steps["lasso"].coef_[0] != 0).sum())
+    _nz_min = int((_search.best_estimator_.named_steps["lasso"].coef_[0] != 0).sum())
 
     # Refit at λ1se
     _pipe_lasso = Pipeline([
@@ -242,6 +268,8 @@ def _train_and_build() -> dict:
     _sel_mask  = _lc != 0
     _sel_cols  = X_train.columns[_sel_mask].tolist()
     _n_sel     = len(_sel_cols)
+    if not _n_sel:
+        raise ValueError("The one-standard-error rule selected no predictors.")
     _feat_names = list(X_train.columns)
     _sel_idx   = [_feat_names.index(f) for f in _sel_cols]
     _lasso_coef = {f: float(_lc[i]) for f, i in zip(_sel_cols, np.where(_sel_mask)[0])}
@@ -250,41 +278,40 @@ def _train_and_build() -> dict:
     X_tr_sel = X_train[_sel_cols].values
     X_te_sel = X_test[_sel_cols].values
     _pipe_lr = Pipeline([
+        ("design", make_design(_sel_cols, _decisions)),
         ("scaler", RobustScaler()),
-        ("lr",     LogisticRegression(penalty=None, solver="lbfgs", max_iter=5000)),
+        ("lr",     LogisticRegression(penalty=None, solver="lbfgs", max_iter=10000, tol=1e-8)),
     ])
     _pipe_lr.fit(X_tr_sel, _y_tr)
 
     _lr_coef = _pipe_lr.named_steps["lr"].coef_[0]
     _lr_int  = float(_pipe_lr.named_steps["lr"].intercept_[0])
-    _lr_coef_map = {f: float(_lr_coef[k]) for k, f in enumerate(_sel_cols)}
+    _design_cols = list(_pipe_lr.named_steps["design"].get_feature_names_out(_sel_cols))
+    _design_cols = [name.split("__", 1)[1] for name in _design_cols]
+    _lr_coef_map = {f: float(_lr_coef[k]) for k, f in enumerate(_design_cols)}
 
     _prob_train = _pipe_lr.predict_proba(X_tr_sel)[:, 1]
     _prob_test  = _pipe_lr.predict_proba(X_te_sel)[:, 1]
     _auc_train  = roc_auc_score(_y_tr, _prob_train)
     _auc_test   = roc_auc_score(_y_te, _prob_test)
-    _fpr_tr, _tpr_tr, _ = roc_curve(_y_tr, _prob_train)
-    _fpr_te, _tpr_te, _ = roc_curve(_y_te, _prob_test)
-
-    _pr05 = (_prob_test >= 0.5).astype(int)
-    _tn, _fp, _fn, _tp = confusion_matrix(_y_te, _pr05).ravel()
-    _acc05  = accuracy_score(_y_te, _pr05)
-    _sens05 = _tp / (_tp + _fn)
-    _spec05 = _tn / (_tn + _fp)
-    _ppv05  = _tp / (_tp + _fp) if (_tp + _fp) > 0 else 0.0
-    _npv05  = _tn / (_tn + _fn) if (_tn + _fn) > 0 else 0.0
-    _f1_05  = f1_score(_y_te, _pr05)
+    _fpr_tr, _tpr_tr, _ = roc_curve(1 - _y_tr, 1 - _prob_train)
+    _fpr_te, _tpr_te, _ = roc_curve(1 - _y_te, 1 - _prob_test)
+    _train_metrics = _threshold_metrics(_y_tr, _prob_train)
+    _test_metrics = _threshold_metrics(_y_te, _prob_test)
 
     _brier_train = float(brier_score_loss(_y_tr, _prob_train))
     _brier_test  = float(brier_score_loss(_y_te, _prob_test))
     _null_brier  = float(np.mean((_y_te - float(_y_tr.mean())) ** 2))
 
     _cal_frac, _cal_mean = _sklearn_cal_curve(
-        _y_te, _prob_test, n_bins=10, strategy="quantile")
-    _hl_chi2, _hl_p, _hl_df = _hosmer_lemeshow(_y_te, _prob_test)
+        1 - _y_te, 1 - _prob_test, n_bins=10, strategy="quantile")
+    _hl_chi2, _hl_p, _hl_df = _hosmer_lemeshow(1 - _y_te, 1 - _prob_test)
 
-    _X_tr_sc_sel = _pipe_lr.named_steps["scaler"].transform(X_tr_sel)
-    _vif = _compute_vif(_X_tr_sc_sel, _sel_cols)
+    _X_tr_design = _pipe_lr.named_steps["design"].transform(X_tr_sel)
+    _X_tr_sc_sel = _pipe_lr.named_steps["scaler"].transform(_X_tr_design)
+    _vif = _compute_vif(_X_tr_sc_sel, _design_cols)
+    _raw_vif = _compute_vif(RobustScaler().fit_transform(X_tr_sel), _sel_cols)
+    _influence_summary = _review_influence(_X_tr_sc_sel, _y_tr, X_train, _audit_dir)
 
     # LASSO regularization path
     _X_scaled   = _pipe_lasso.named_steps["scaler"].transform(X_train.values)
@@ -292,7 +319,8 @@ def _train_and_build() -> dict:
     _LOG_C      = np.log10(_C_PATH)
     _PATH_COEFS = np.zeros((len(_C_PATH), X_train.shape[1]))
     for _i, _c in enumerate(_C_PATH):
-        _m = LogisticRegression(penalty="l1", solver="liblinear", C=_c, max_iter=5000)
+        _m = LogisticRegression(penalty="l1", solver="liblinear", C=_c,
+                                max_iter=5000, random_state=_seed)
         _m.fit(_X_scaled, _y_tr)
         _PATH_COEFS[_i] = _m.coef_[0]
 
@@ -304,29 +332,37 @@ def _train_and_build() -> dict:
         _train_medians[f] = float(np.median(X_train[f].values))
         _feat_ranges[f] = (float(v.min()), float(v.max()), _train_medians[f])
 
-    # LRT linearity test
-    _lrt: dict[str, dict] = {}
-    for _f in _sel_cols:
-        _chi2, _p = _lrt_one(X_train[_f].values, _y_tr)
-        _lrt[_f] = {"chi2": _chi2, "p": _p, "linear": _p >= 0.10}
-
-    # Precompute linearity scatter data (keeps raw X_train out of bundle)
-    _lrt_plot: dict[str, dict] = {}
-    for feat in _sel_cols:
-        x    = X_train[feat].values
-        cuts = np.unique(np.percentile(x, np.linspace(0, 100, 11)))
-        bidx = np.digitize(x, cuts[1:-1])
-        mids, logits = [], []
-        for b in np.unique(bidx):
-            msk = bidx == b
-            if msk.sum() < 5:
-                continue
-            p = np.clip(_y_tr[msk].mean(), 0.01, 0.99)
-            mids.append(float(x[msk].mean()))
-            logits.append(float(np.log(p / (1 - p))))
-        _lrt_plot[feat] = {"mids": mids, "logits": logits}
+    _lrt = {name: _decisions[name]["lrt"] for name in _sel_cols}
+    _lrt_plot = {name: _all_plot_data[name] for name in _sel_cols}
+    for name, decision in _decisions.items():
+        decision["selected"] = name in _sel_cols
+        if name in _sel_cols:
+            index = _sel_cols.index(name)
+            fitted = _pipe_lr.named_steps["design"].named_transformers_[f"feature{index}"]
+            if "spline" in fitted.named_steps:
+                decision["spline_knots"] = fitted.named_steps["spline"].bsplines_[0].t.tolist()
+            if "center" in fitted.named_steps:
+                decision["centering_constant"] = float(fitted.named_steps["center"].mean_[0])
 
     return dict(
+        BUNDLE_SCHEMA_VERSION=BUNDLE_SCHEMA_VERSION,
+        TRAINING_METADATA={
+            "seed": _seed, "test_size": 0.2, "stratified": True,
+            "cv_folds": 5, "cv_preprocessing": "fitted within each training fold",
+            "positive_class": "malignant (target=0)",
+            "probability_arrays": "P(benign), converted for malignant-positive evaluation",
+            "train_performance": "apparent; includes feature selection and refitting",
+            "cv_performance": "LASSO tuning only; not validation of the final two-stage model",
+            "limitations": ["GAM smooth p-values are approximate association tests, not tests of linearity; LRT is reported separately.",
+                            "Feature selection and form screening are conditional on the training sample; apparent metrics are optimistic.",
+                            "Single internal holdout; no external validation."],
+            "versions": {name: version(name) for name in
+                         ("numpy", "pandas", "scipy", "scikit-learn")},
+        },
+        EDA_DECISIONS=_decisions, TRAIN_METRICS_05=_train_metrics,
+        DESIGN_COLS=_design_cols, RAW_VIF=_raw_vif,
+        INFLUENCE_SUMMARY=_influence_summary,
+        TEST_METRICS_05=_test_metrics,
         pipe_lasso=_pipe_lasso, pipe_lr=_pipe_lr,
         CS=_CS, MEAN_AUC=_mean_auc, SE_AUC=_se_auc,
         C_MIN=_c_min, C_1SE=_c_1se, THR_1SE=_thr_1se,
@@ -338,8 +374,9 @@ def _train_and_build() -> dict:
         y_tr=_y_tr, y_te=_y_te,
         AUC_TRAIN=_auc_train, AUC_TEST=_auc_test,
         FPR_TR=_fpr_tr, TPR_TR=_tpr_tr, FPR_TE=_fpr_te, TPR_TE=_tpr_te,
-        ACC05=_acc05, SENS05=_sens05, SPEC05=_spec05,
-        PPV05=_ppv05, NPV05=_npv05, F1_05=_f1_05,
+        ACC05=_test_metrics["acc"], SENS05=_test_metrics["sens"],
+        SPEC05=_test_metrics["spec"], PPV05=_test_metrics["ppv"],
+        NPV05=_test_metrics["npv"], F1_05=_test_metrics["f1"],
         BRIER_TRAIN=_brier_train, BRIER_TEST=_brier_test, NULL_BRIER=_null_brier,
         CAL_FRAC=_cal_frac, CAL_MEAN=_cal_mean,
         HL_CHI2=_hl_chi2, HL_P=_hl_p, HL_DF=_hl_df,
@@ -351,21 +388,107 @@ def _train_and_build() -> dict:
     )
 
 
+def _review_influence(design, target, raw_train, output_dir) -> dict:
+    """Inspect extremes and logistic influence; never exclude rows mechanically."""
+    import statsmodels.api as sm
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    q1, q3 = raw_train.quantile(0.25), raw_train.quantile(0.75)
+    extreme = ((raw_train < q1 - 3 * (q3 - q1))
+               | (raw_train > q3 + 3 * (q3 - q1)))
+    summary = {
+        "extreme_rows": int(extreme.any(axis=1).sum()),
+        "extremes_by_variable": extreme.sum().to_dict(),
+        "exclusions": 0, "winsorisation": "none",
+        "decision": "All values are finite and non-negative; no verified data errors. Retain extreme observations and flag influence for review.",
+    }
+    try:
+        fitted = sm.GLM(target, sm.add_constant(design), family=sm.families.Binomial()).fit()
+        influence = fitted.get_influence(observed=True)
+        leverage = influence.hat_matrix_diag
+        cooks = influence.cooks_distance[0]
+        finite = np.isfinite(leverage) & np.isfinite(cooks)
+        summary.update({
+            "influence_available": bool(finite.all()),
+            "high_leverage_rows": int((leverage > 2 * (design.shape[1] + 1) / len(target)).sum()),
+            "high_cooks_rows": int((cooks > 4 / len(target)).sum()),
+            "maximum_cooks": float(np.max(cooks[finite])) if finite.any() else None,
+        })
+        pd.DataFrame({"training_row": raw_train.index, "leverage": leverage,
+                      "cooks_distance": cooks}).to_csv(
+            output_dir / "influence_diagnostics.csv", index=False)
+    except (ValueError, np.linalg.LinAlgError) as error:
+        summary.update({"influence_available": False, "reason": str(error)})
+    (output_dir / "outlier_influence_review.json").write_text(
+        json.dumps(summary, indent=2, allow_nan=False), encoding="utf-8")
+    return summary
+
+
+def _startup_from_scratch() -> dict:
+    """Clean reference data before training; keep row-level exports local."""
+    output_dir = Path(__file__).parent / ".cache" / "training"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    data = load_breast_cancer()
+    cleaned = pd.DataFrame(data.data, columns=data.feature_names)
+    cleaned["target"] = data.target.astype(int)
+    cleaned_path = output_dir / "breast_cancer_cleaned.csv"
+    cleaned.to_csv(cleaned_path, index=False)
+    dictionary = [{
+        "variable": str(name), "variable_type": "continuous",
+        "definition": str(name), "unit": "Dataset-provided measurement scale",
+        "missing_codes": [], "valid_range": "finite and non-negative",
+    } for name in data.feature_names]
+    dictionary.append({"variable": "target", "variable_type": "binary",
+                       "definition": "0=malignant; 1=benign", "unit": "none"})
+    (output_dir / "data_dictionary.json").write_text(
+        json.dumps(dictionary, indent=2), encoding="utf-8")
+    audit = {
+        "sample_size": len(cleaned), "predictor_count": len(data.feature_names),
+        "outcome": "target", "positive_class": "malignant (target=0)",
+        "duplicate_rows": int(cleaned.duplicated().sum()),
+        "missing_per_variable": cleaned.isna().sum().to_dict(),
+        "rows_with_missing": int(cleaned.isna().any(axis=1).sum()),
+        "missingness_by_outcome": cleaned.groupby("target").apply(
+            lambda group: int(group.isna().any(axis=1).sum()),
+            include_groups=False).to_dict(),
+        "cleaning": "Type normalization only; no data-dependent transformations or exclusions.",
+    }
+    (output_dir / "data_audit.json").write_text(
+        json.dumps(audit, indent=2), encoding="utf-8")
+    bundle = _train_and_build(pd.read_csv(cleaned_path))
+    decisions = {
+        "metadata": bundle["TRAINING_METADATA"],
+        "variables": bundle["EDA_DECISIONS"],
+    }
+    (_BUNDLE_PATH.parent / "eda_decisions.json").write_text(
+        json.dumps(decisions, indent=2, allow_nan=False), encoding="utf-8")
+    return bundle
+
+
+def _save_bundle(bundle: dict) -> None:
+    _BUNDLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = _BUNDLE_PATH.with_suffix(".pkl.tmp")
+    with temporary_path.open("wb") as handle:
+        pickle.dump(bundle, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    temporary_path.replace(_BUNDLE_PATH)
+
+
 print("=" * 56, flush=True)
 print("Breast Cancer App — initialising", flush=True)
 print("=" * 56, flush=True)
 
 SEED = 42
 
-if _BUNDLE_PATH.exists():
+if _BUNDLE_PATH.exists() and os.environ.get("BC_FORCE_REBUILD") != "1":
     print("  Loading bundle ...", flush=True)
     with open(_BUNDLE_PATH, "rb") as _f:
         _B = pickle.load(_f)
+    if _B.get("BUNDLE_SCHEMA_VERSION") != BUNDLE_SCHEMA_VERSION:
+        raise RuntimeError("Outdated model bundle. Run rebuild_bundle.py before deployment.")
 else:
     print("  Training from scratch ...", flush=True)
-    _B = _train_and_build()
-    with open(_BUNDLE_PATH, "wb") as _f:
-        pickle.dump(_B, _f)
+    _B = _startup_from_scratch()
+    _save_bundle(_B)
     print(f"  Bundle saved: {_BUNDLE_PATH}", flush=True)
 
 pipe_lasso   = _B["pipe_lasso"]
@@ -386,6 +509,8 @@ LASSO_COEF   = _B["LASSO_COEF"]
 LR_COEF      = _B["LR_COEF"]
 LR_INT       = _B["LR_INT"]
 LR_COEF_MAP  = _B["LR_COEF_MAP"]
+DESIGN_COLS  = _B["DESIGN_COLS"]
+EDA_DECISIONS = _B["EDA_DECISIONS"]
 PROB_TRAIN   = _B["PROB_TRAIN"]
 PROB_TEST    = _B["PROB_TEST"]
 y_tr         = _B["y_tr"]
@@ -411,6 +536,7 @@ HL_CHI2      = _B["HL_CHI2"]
 HL_P         = _B["HL_P"]
 HL_DF        = _B["HL_DF"]
 VIF          = _B["VIF"]
+RAW_VIF      = _B["RAW_VIF"]
 LRT          = _B["LRT"]
 LRT_PLOT_DATA = _B["LRT_PLOT_DATA"]
 LOG_C        = _B["LOG_C"]
@@ -441,26 +567,29 @@ print(f"  HL test  chi2={HL_CHI2:.2f}  p={HL_P:.3f}  df={HL_DF}", flush=True)
 print("  Ready.", flush=True)
 
 
-def _threshold_metrics(y_true: np.ndarray, p_benign: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
-    """Evaluate a decision rule while treating malignancy as the positive class."""
-    y_malignant = (np.asarray(y_true) == 0).astype(int)
-    p_malignant = 1.0 - np.asarray(p_benign, dtype=float)
-    pred_malignant = (p_malignant >= threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_malignant, pred_malignant, labels=[0, 1]).ravel()
-    acc = (tp + tn) / len(y_malignant)
-    sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-    ppv = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
-    f1 = 2 * ppv * sens / (ppv + sens) if (ppv + sens) > 0 else 0.0
-    return {
-        "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
-        "acc": float(acc), "sens": float(sens), "spec": float(spec),
-        "ppv": float(ppv), "npv": float(npv), "f1": float(f1),
-    }
-
-
 TEST_METRICS_05 = _threshold_metrics(y_te, PROB_TEST, 0.5)
+TRAIN_METRICS_05 = _threshold_metrics(y_tr, PROB_TRAIN, 0.5)
+
+
+def _validated_predictors(frame: pd.DataFrame) -> np.ndarray:
+    """Validate data at the server boundary before model prediction."""
+    if frame.empty:
+        raise ValueError("The CSV contains no data rows.")
+    if len(frame) > 10000:
+        raise ValueError("Upload at most 10,000 rows per batch.")
+    missing = [name for name in SEL_COLS if name not in frame.columns]
+    if missing:
+        raise ValueError(f"Missing columns: {', '.join(missing)}")
+    try:
+        selected = frame[SEL_COLS].apply(pd.to_numeric, errors="raise")
+    except (ValueError, TypeError) as exc:
+        raise ValueError("All required feature columns must contain numeric values.") from exc
+    values = selected.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("Required features must contain finite values with no blanks or missing values.")
+    if (values < 0).any():
+        raise ValueError("Nuclear morphology measurements cannot be negative.")
+    return values
 
 
 # ── 2. Figure helpers ────────────────────────────────────────────────────────
@@ -516,7 +645,7 @@ def _autoscale(fig, scale=0.65, target_w=7.0):
 
 def _make_feat_sel_fig():
     """A: LASSO regularization path · B: 5-fold CV AUC"""
-    fig  = plt.figure(figsize=(4.75, 2.28))
+    fig  = plt.figure(figsize=(7.0, 3.5))
     gs   = fig.add_gridspec(1, 2, wspace=0.34)
 
     # ── A: LASSO regularization path ────────────────────────────────────────
@@ -578,8 +707,8 @@ def _make_feat_sel_fig():
 
 
 def _make_perf_fig():
-    """A: ROC curve · B: LR coefficients"""
-    fig = plt.figure(figsize=(4.75, 2.28))
+    """A: train/test ROC curves; B: train/test calibration."""
+    fig = plt.figure(figsize=(7.0, 3.5))
     gs  = fig.add_gridspec(1, 2, wspace=0.34)
 
     # ── A: ROC curves ───────────────────────────────────────────────────────
@@ -598,24 +727,24 @@ def _make_perf_fig():
     _P(ax_roc, "A")
     ax_roc.legend(loc="lower right", fontsize=7.5)
 
-    # ── B: LR coefficients ──────────────────────────────────────────────────
+    # B: calibration on the malignant-positive probability scale.
     ax_coef = fig.add_subplot(gs[0, 1])
     _style_axis(ax_coef)
-    _ord  = np.argsort(LR_COEF)
-    _fo   = [SEL_COLS[i] for i in _ord]
-    _co   = LR_COEF[_ord]
-    _clrs = [CLR_MAL if c < 0 else CLR_BEN for c in _co]
-    ax_coef.barh(range(len(_fo)), _co, color=_clrs, alpha=0.78,
-                 edgecolor="none", height=0.58)
-    ax_coef.axvline(0, color=_EDGE, lw=0.8, alpha=0.65)
-    ax_coef.set_yticks(range(len(_fo)))
-    ax_coef.set_yticklabels(_fo, fontsize=7.5)
-    ax_coef.set_xlabel("Logistic Regression Coefficient")
+    ax_coef.plot([0, 1], [0, 1], color=CELL_COLORS[3], lw=1, ls="--")
+    for label, target, probability, color, brier in (
+        ("Train", y_tr, PROB_TRAIN, CLR_TRAIN, BRIER_TRAIN),
+        ("Test", y_te, PROB_TEST, CLR_TEST, BRIER_TEST),
+    ):
+        observed, predicted = _sklearn_cal_curve(
+            1 - target, 1 - probability, n_bins=10, strategy="quantile")
+        ax_coef.plot(predicted, observed, color=color, lw=1, marker="o",
+                     markersize=4, label=f"{label} Brier = {brier:.3f}")
+    ax_coef.set_xlim(0, 1)
+    ax_coef.set_ylim(0, 1.02)
+    ax_coef.set_xlabel("Predicted malignancy probability")
+    ax_coef.set_ylabel("Observed malignant fraction")
     _P(ax_coef, "B")
-    ax_coef.legend(
-        handles=[Patch(facecolor=CLR_BEN, alpha=0.78, label="↑ Benign"),
-                 Patch(facecolor=CLR_MAL, alpha=0.78, label="↑ Malignant")],
-        loc="lower right", fontsize=7.5)
+    ax_coef.legend(loc="upper left", fontsize=8)
 
     fig.tight_layout(pad=0.6)
     return _autoscale(fig)
@@ -625,7 +754,7 @@ def _make_linearity_fig():
     """A–G: log-odds linearity check (LRT) for each selected feature"""
     n_cols = 4 if len(SEL_COLS) > 4 else max(1, len(SEL_COLS))
     n_rows = int(np.ceil(len(SEL_COLS) / n_cols))
-    fig = plt.figure(figsize=(5.2, 1.275 * n_rows))
+    fig = plt.figure(figsize=(7.0, 3.5))
     gs  = fig.add_gridspec(n_rows, n_cols, wspace=0.42, hspace=0.58)
 
     for k, feat in enumerate(SEL_COLS):
@@ -637,22 +766,25 @@ def _make_linearity_fig():
         logits = LRT_PLOT_DATA[feat]["logits"]
         ax.scatter(mids, logits, color=CLR_TRAIN, s=22, zorder=3,
                    alpha=0.82, edgecolors="none")
-        if len(mids) > 2:
-            z  = np.polyfit(mids, logits, 1)
-            xl = np.linspace(min(mids), max(mids), 100)
-            ax.plot(xl, np.polyval(z, xl), color=_EDGE, lw=1.0, ls="--")
+        ax.fill_between(LRT_PLOT_DATA[feat]["grid"], LRT_PLOT_DATA[feat]["gam_lower"],
+                        LRT_PLOT_DATA[feat]["gam_upper"], color=CLR_BEN, alpha=0.2)
+        ax.plot(LRT_PLOT_DATA[feat]["grid"], LRT_PLOT_DATA[feat]["gam_logit"],
+                color=CLR_MAL, lw=1)
+        ax.plot(LRT_PLOT_DATA[feat]["grid"],
+                LRT_PLOT_DATA[feat]["linear_logit"],
+                color=_EDGE, lw=1.0, ls="--")
         r_lrt  = LRT[feat]
         linear = r_lrt["linear"]
         t_col  = _NAVY if linear else CLR_1SE
-        verdict = "linear" if linear else "non-linear"
-        ax.text(0.97, 0.97, f"p={r_lrt['p']:.3f}  {verdict}",
+        verdict = EDA_DECISIONS[feat]["functional_form"]
+        ax.text(0.97, 0.97, f"LRT p={r_lrt['p']:.3f}\nedf={EDA_DECISIONS[feat]['gam_edf']:.2f}; {verdict}",
                 transform=ax.transAxes, fontsize=6.8, va="top", ha="right",
                 color=t_col, style="italic",
                 bbox=dict(facecolor="white", edgecolor="none",
                            alpha=0.75, pad=0.5))
         ax.set_xlabel(feat.replace("worst ", "").title(), labelpad=2)
-        ax.set_ylabel("Log-odds", labelpad=2)
-        _P(ax, "ABCDEFG"[k])
+        ax.set_ylabel("Malignancy log-odds", labelpad=2)
+        _P(ax, chr(ord("A") + k))
         ax.tick_params(labelsize=8.0)
 
     for k in range(len(SEL_COLS), n_rows * n_cols):
@@ -664,10 +796,10 @@ def _make_linearity_fig():
 
 def _make_vif_fig():
     """Single panel: variance inflation factor for selected features"""
-    vif_vals   = [VIF[f] for f in SEL_COLS]
+    vif_vals   = [RAW_VIF[f] for f in SEL_COLS]
     vif_colors = [CLR_1SE if v > 10 else (_ORANGE if v > 5 else CLR_BEN)
                   for v in vif_vals]
-    fig, ax = plt.subplots(figsize=(4.75, 2.28))
+    fig, ax = plt.subplots(figsize=(3.5, 3.5))
     _style_axis(ax)
     ax.barh(range(len(SEL_COLS)), vif_vals, color=vif_colors,
             alpha=0.78, edgecolor="none", height=0.52)
@@ -677,7 +809,7 @@ def _make_vif_fig():
                label="VIF=10  (severe)")
     ax.set_yticks(range(len(SEL_COLS)))
     ax.set_yticklabels([feature.title() for feature in SEL_COLS], fontsize=7.5)
-    ax.set_xlabel("Variance Inflation Factor")
+    ax.set_xlabel("Raw-input VIF (design VIF in Methods)")
     _P(ax, "A")
     ax.legend(loc="lower right", fontsize=7.5)
     _vmax = max(vif_vals) if vif_vals else 1.0
@@ -1282,14 +1414,14 @@ html,body{
 /* Plot & figure frames — uniform sizing and spacing */
 .plot-frame{
   width:100%;
-  height:clamp(250px,22vw,340px);
+  height:clamp(220px,18vw,280px);
   display:flex;align-items:center;justify-content:center;
   overflow:hidden;
   padding:8px;
   box-sizing:border-box;
 }
-.plot-frame.plot-map{height:clamp(240px,28vw,340px);}
-.plot-frame.plot-wide{height:clamp(320px,36vw,520px);}
+.plot-frame.plot-map{height:clamp(220px,22vw,280px);}
+.plot-frame.plot-wide{height:clamp(240px,22vw,320px);}
 .plot-frame .shiny-plot-output{width:100%!important;height:100%!important;}
 .plot-frame .shiny-plot-output img,.plot-frame .shiny-plot-output canvas{
   width:100%!important;height:100%!important;max-width:100%!important;
@@ -1297,12 +1429,13 @@ html,body{
 }
 .figure-frame{
   width:100%;
-  height:clamp(210px,18vw,300px);
+  height:clamp(190px,15vw,240px);
   display:flex;align-items:center;justify-content:center;
   overflow:hidden;
   padding:8px;
   box-sizing:border-box;
 }
+.figure-frame.figure-frame-wide{height:clamp(250px,22vw,320px);}
 .figure-frame .shiny-html-output{
   width:100%!important;height:100%!important;
   display:flex;align-items:center;justify-content:center;
@@ -1326,8 +1459,8 @@ html,body{
 .equal-card .plot-frame{flex:0 0 auto;}
 .plot-frame,.result-frame{flex:1 1 auto;min-height:0;}
 .result-frame{display:flex;flex-direction:column;justify-content:flex-start;}
-.result-frame.result-map{min-height:clamp(240px,28vw,340px);}
-.result-frame.result-gauge{min-height:clamp(260px,26vw,360px);}
+.result-frame.result-map{min-height:clamp(220px,22vw,280px);}
+.result-frame.result-gauge{min-height:clamp(220px,20vw,280px);}
 /* Probability gauge */
 .prob-gauge{text-align:center;padding:1rem 0 .85rem;}
 .prob-num{font-size:clamp(2.3rem,3.4vw,3rem);font-weight:800;line-height:1.0;}
@@ -1370,6 +1503,16 @@ html,body{
 }
 .cm-cell .cm-n{font-size:1.6rem;font-weight:800;line-height:1.05;}
 .cm-cell .cm-desc{font-size:.68rem;color:var(--muted);margin-top:5px;line-height:1.35;}
+.threshold-metric-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+}
+.threshold-metric{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 12px;border:1px solid var(--line);border-radius:var(--rs);
+  background:var(--surface);
+}
+.threshold-metric span{font-size:.72rem;color:var(--muted);line-height:1.3;}
+.threshold-metric strong{font-size:.86rem;color:var(--ink);font-variant-numeric:tabular-nums;}
 /* Solid Cell colour layer */
 .hero-banner{
   background:#DC0000;
@@ -1497,17 +1640,19 @@ html,body{
   .bslib-sidebar-layout>.main{padding:14px!important;}
   .page-title{font-size:clamp(1.55rem,7vw,2rem);}
   .page-subtitle{font-size:.9rem;}
-  .plot-frame{height:clamp(220px,60vw,320px);}
-  .plot-frame.plot-map{height:clamp(220px,60vw,310px);}
-  .plot-frame.plot-wide{height:clamp(300px,80vw,460px);}
-  .figure-frame{height:clamp(200px,58vw,300px);}
-  .result-frame.result-map{min-height:clamp(220px,60vw,310px);}
-  .result-frame.result-gauge{min-height:clamp(230px,60vw,330px);}
+  .plot-frame{height:clamp(210px,58vw,290px);}
+  .plot-frame.plot-map{height:clamp(210px,58vw,290px);}
+  .plot-frame.plot-wide{height:clamp(230px,68vw,340px);}
+  .figure-frame{height:clamp(190px,52vw,260px);}
+  .figure-frame.figure-frame-wide{height:clamp(240px,68vw,340px);}
+  .result-frame.result-map{min-height:clamp(210px,58vw,290px);}
+  .result-frame.result-gauge{min-height:clamp(210px,54vw,280px);}
   .nav-tabs .nav-link{padding:.5rem .8rem;font-size:.74rem;}
   .cm-wrap{grid-template-columns:96px 1fr 1fr;grid-template-rows:38px 1fr 1fr;}
 }
 @media (max-width: 700px){
   .summary-grid,.note-grid{grid-template-columns:1fr;}
+  .threshold-metric-grid{grid-template-columns:1fr;}
   .page-title{font-size:1.42rem;}
   .navbar{padding:.7rem .85rem;}
 }
@@ -1769,27 +1914,32 @@ app_ui = ui.page_sidebar(
                 ),
                 class_="note-grid",
             ),
-            ui.card(
-                ui.card_header("Training Set — Predicted Probability Distribution"),
-                ui.tags.div(
-                    ui.output_plot("hist_img", width="100%", height="100%"),
-                    class_="plot-frame plot-wide",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Training Set — Predicted Probability Distribution"),
+                    ui.tags.div(
+                        ui.output_plot("hist_img", width="100%", height="100%"),
+                        class_="plot-frame plot-wide",
+                    ),
+                    class_="equal-card",
                 ),
+                ui.card(
+                    ui.card_header("Threshold Selection and Confusion Matrix"),
+                    ui.input_slider("threshold", "Decision Threshold",
+                                    min=0.01, max=0.99, value=0.50, step=0.01),
+                    ui.tags.p(
+                        "Classified as malignant when P(malignant) >= threshold; "
+                        "benign otherwise.",
+                        style=f"font-size:.76rem;color:{_MUTED};margin-bottom:4px;",
+                    ),
+                    ui.output_ui("cm_display"),
+                    class_="equal-card",
+                ),
+                col_widths=[7, 5],
             ),
             ui.card(
-                ui.card_header("Threshold Selection"),
-                ui.input_slider("threshold", "Decision Threshold",
-                                min=0.01, max=0.99, value=0.50, step=0.01),
-                ui.tags.p(
-                    "Classified as malignant when P(malignant) >= threshold; "
-                    "benign otherwise.",
-                    style=f"font-size:.76rem;color:{_MUTED};margin-bottom:8px;",
-                ),
-                ui.layout_columns(
-                    ui.output_ui("cm_display"),
-                    ui.output_ui("metrics_table"),
-                    col_widths=[5, 7],
-                ),
+                ui.card_header("Performance at the Selected Threshold"),
+                ui.output_ui("metrics_table"),
             ),
         ),
 
@@ -1854,16 +2004,19 @@ app_ui = ui.page_sidebar(
                     ui.tags.p(
                         ui.tags.span("Figure 2", class_="fig-no"),
                         " · ROC curves on training and held-out test "
-                        "sets (A), and unpenalized logistic-regression coefficients (B).",
+                        "sets (A), and training/test calibration curves (B).",
                         class_="figure-caption",
                     ),
                     class_="equal-card",
                 ),
+                col_widths=[6, 6],
+            ),
+            ui.layout_columns(
                 ui.card(
                     ui.card_header("Linearity Assessment (LRT, α = 0.10)"),
                     ui.tags.div(
                         ui.output_ui("fig_linearity"),
-                        class_="figure-frame",
+                        class_="figure-frame figure-frame-wide",
                     ),
                     ui.tags.p(
                         ui.tags.span("Figure 3", class_="fig-no"),
@@ -1877,7 +2030,7 @@ app_ui = ui.page_sidebar(
                     ui.card_header("Collinearity (VIF)"),
                     ui.tags.div(
                         ui.output_ui("fig_vif"),
-                        class_="figure-frame",
+                        class_="figure-frame figure-frame-wide",
                     ),
                     ui.tags.p(
                         ui.tags.span("Figure 4", class_="fig-no"),
@@ -1887,7 +2040,7 @@ app_ui = ui.page_sidebar(
                     ),
                     class_="equal-card",
                 ),
-                col_widths=[6, 6],
+                col_widths=[7, 5],
             ),
         ),
 
@@ -2019,12 +2172,18 @@ def server(input, output, session):
     def _submitted_inputs() -> dict:
         input.submit()
         with reactive.isolate():
-            return {f: float(input[_sid(f)]()) for f in SEL_COLS}
+            try:
+                values = {f: float(input[_sid(f)]()) for f in SEL_COLS}
+                _validated_predictors(pd.DataFrame([values]))
+                return values
+            except (ValueError, TypeError):
+                from shiny.types import SafeException
+                raise SafeException("Enter a finite, non-negative number for every measurement.") from None
 
     @reactive.calc
     def _patient_prob() -> float:
         vals = _submitted_inputs()
-        X    = pd.DataFrame([vals])[SEL_COLS].values
+        X = _validated_predictors(pd.DataFrame([vals]))
         return float(pipe_lr.predict_proba(X)[0, 1])
 
     @render.ui
@@ -2102,7 +2261,7 @@ def server(input, output, session):
   </table>
 </div>
 <p style="font-size:.68rem;color:{_MUTED};margin-top:6px;">
-  In this model, a negative logistic-regression coefficient means that higher feature values are associated with a higher probability of malignancy.
+  The model applies fitted transformations and nonlinear terms internally. The effect of one measurement can vary across its range.
 </p>
 """)
 
@@ -2117,11 +2276,11 @@ def server(input, output, session):
             df = pd.read_csv(fi[0]["datapath"])
         except Exception as e:
             return None, f"Read error: {e}"
-        missing = [c for c in SEL_COLS if c not in df.columns]
-        if missing:
-            return None, f"Missing columns: {', '.join(missing)}"
-        X_b  = df[SEL_COLS].values
-        p_benign = pipe_lr.predict_proba(X_b)[:, 1]
+        try:
+            X_b = _validated_predictors(df)
+            p_benign = pipe_lr.predict_proba(X_b)[:, 1]
+        except (ValueError, TypeError, OverflowError) as exc:
+            return None, str(exc)
         p_malignant = 1.0 - p_benign
         df["P_malignant"] = p_malignant.round(4)
         df["P_benign"]    = p_benign.round(4)
@@ -2188,7 +2347,7 @@ def server(input, output, session):
     def hist_img():
         thr  = float(input.threshold())
         p_malignant = 1.0 - PROB_TRAIN
-        fig, ax = plt.subplots(figsize=(10.3, 4.9))
+        fig, ax = plt.subplots(figsize=(7.0, 3.5))
         _style_axis(ax)
         _grid_light(ax)
         bins = np.linspace(0, 1, 26)
@@ -2248,8 +2407,9 @@ def server(input, output, session):
     def metrics_table():
         thr  = float(input.threshold())
         metrics = _threshold_metrics(y_tr, PROB_TRAIN, thr)
-        rows_html = "".join(
-            f"<tr><td>{lbl}</td><td class='num'>{val:.4f}</td></tr>"
+        metric_tiles = "".join(
+            f"<div class='threshold-metric'><span>{lbl}</span>"
+            f"<strong>{val:.4f}</strong></div>"
             for lbl, val in [
                 ("Accuracy",                           metrics["acc"]),
                 ("Sensitivity (malignant cases)",      metrics["sens"]),
@@ -2260,12 +2420,7 @@ def server(input, output, session):
             ]
         )
         return ui.HTML(f"""
-<div style="overflow-x:auto;">
-  <table class="tbl">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>{rows_html}</tbody>
-  </table>
-</div>
+<div class="threshold-metric-grid">{metric_tiles}</div>
 <p style="font-size:.72rem;color:{_MUTED};margin-top:6px;">
   Evaluated on the training set (n={N_TRAIN}), with malignancy treated as the positive class.
 </p>
@@ -2296,12 +2451,11 @@ def server(input, output, session):
         rows = ""
         order = np.argsort(np.abs(LR_COEF))[::-1]
         for i in order:
-            f   = SEL_COLS[i]
-            lc  = LASSO_COEF[f]
+            f   = DESIGN_COLS[i]
             rc  = LR_COEF[i]
             rows += (
                 f"<tr><td>{f}</td>"
-                f"<td class='num' style='color:{CLR_1SE};'>{lc:+.4f}</td>"
+                "<td class='num'>Not applicable</td>"
                 f"<td class='num' style='color:{CLR_BEN};'>{rc:+.4f}</td></tr>"
             )
         return ui.HTML(f"""
@@ -2334,7 +2488,7 @@ def server(input, output, session):
     def perf_metrics_table():
         hl_interpretation = (
             "no evidence of lack of fit"
-            if HL_P >= 0.05 else "evidence of lack of fit"
+            if HL_P >= 0.10 else "evidence of lack of fit"
         )
         rows_html = "".join(
             f"<tr><td>{lbl}</td><td class='num'>{val:.4f}</td></tr>"
@@ -2385,18 +2539,18 @@ def server(input, output, session):
             f"<td class='num'>{TRAIN_MEDIANS[f]:.4g}</td>"
             f"<td class='num'>{LRT[f]['chi2']:.2f}</td>"
             f"<td class='num'>{LRT[f]['p']:.3f}</td>"
-            f"<td>{'No evidence of nonlinearity' if LRT[f]['linear'] else 'Evidence of nonlinearity'}</td></tr>"
+            f"<td>{EDA_DECISIONS[f]['transformation']} / {EDA_DECISIONS[f]['functional_form']}</td></tr>"
             for f in SEL_COLS
         )
         vif_rows = "".join(
             f"<tr><td><code>{f}</code></td>"
             f"<td class='num'>{VIF[f]:.3f}</td>"
             f"<td>{'Acceptable (<5)' if VIF[f] < 5 else ('Moderate (5–10)' if VIF[f] < 10 else 'Severe (>10)')}</td></tr>"
-            for f in SEL_COLS
+            for f in DESIGN_COLS
         )
         hl_interpretation = (
             "no evidence of lack of fit"
-            if HL_P >= 0.05 else "evidence of lack of fit"
+            if HL_P >= 0.10 else "evidence of lack of fit"
         )
         return ui.HTML(f"""
 <div class="methods">
@@ -2407,14 +2561,16 @@ def server(input, output, session):
       <table class="tbl">
         <thead><tr>
           <th>Feature</th><th>Training Median</th>
-          <th>LRT χ²</th><th>p-value</th><th>Decision</th>
+          <th>LRT χ²</th><th>p-value</th><th>Applied transform / form</th>
         </tr></thead>
         <tbody>{lin_rows}</tbody>
       </table>
       <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
         The LRT compares a linear logistic GLM with a cubic-spline alternative
-        (sklearn SplineTransformer; n_knots=2, degree=3, df_extra=3).
+        (sklearn SplineTransformer; n_knots=3, degree=3, df_extra=3).
         Evidence against linearity is assessed at α = 0.10.
+        The prespecified GAM effective-degrees-of-freedom rule selects the applied
+        form. GAM smooth p-values test association, not nonlinearity.
       </p>
     </div>
   </div>
@@ -2424,20 +2580,22 @@ def server(input, output, session):
     <div class="card-body" style="padding:14px!important;">
       <table class="tbl">
         <thead><tr>
-          <th>Feature</th><th>VIF</th><th>Verdict</th>
+          <th>Design term</th><th>VIF</th><th>Verdict</th>
         </tr></thead>
         <tbody>{vif_rows}</tbody>
       </table>
       <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
-        VIF computed on RobustScaler-transformed training features.
+        VIF computed on the scaled training design matrix, including spline terms.
         VIF = 1/(1−R²) from regressing each feature on the others.
         VIF &lt; 5: acceptable · 5–10: moderate · &gt;10: severe multicollinearity.
+        Spline basis terms can be strongly correlated; individual basis coefficients
+        should not be interpreted as effects of a one-unit change in the raw input.
       </p>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-header">Model Performance — Test Set (threshold = 0.50)</div>
+    <div class="card-header">Model Performance — Train / Test (threshold = 0.50)</div>
     <div class="card-body" style="padding:14px!important;">
       <table class="tbl">
         <thead><tr><th>Metric</th><th>Value</th></tr></thead>
@@ -2450,15 +2608,17 @@ def server(input, output, session):
               <td class='num'>{NULL_BRIER:.4f}</td></tr>
           <tr><td>Hosmer-Lemeshow χ² (df={HL_DF})</td>
               <td class='num'>{HL_CHI2:.2f}  p={HL_P:.3f}</td></tr>
-          <tr><td>Accuracy</td><td class='num'>{TEST_METRICS_05["acc"]:.4f}</td></tr>
-          <tr><td>Sensitivity (malignant cases)</td><td class='num'>{TEST_METRICS_05["sens"]:.4f}</td></tr>
-          <tr><td>Specificity (benign cases)</td><td class='num'>{TEST_METRICS_05["spec"]:.4f}</td></tr>
-          <tr><td>Positive predictive value</td><td class='num'>{TEST_METRICS_05["ppv"]:.4f}</td></tr>
-          <tr><td>Negative predictive value</td><td class='num'>{TEST_METRICS_05["npv"]:.4f}</td></tr>
-          <tr><td>F1 score (malignant class)</td><td class='num'>{TEST_METRICS_05["f1"]:.4f}</td></tr>
+          <tr><td>Accuracy (Train / Test)</td><td class='num'>{TRAIN_METRICS_05["acc"]:.4f} / {TEST_METRICS_05["acc"]:.4f}</td></tr>
+          <tr><td>Sensitivity (malignant; Train / Test)</td><td class='num'>{TRAIN_METRICS_05["sens"]:.4f} / {TEST_METRICS_05["sens"]:.4f}</td></tr>
+          <tr><td>Specificity (benign; Train / Test)</td><td class='num'>{TRAIN_METRICS_05["spec"]:.4f} / {TEST_METRICS_05["spec"]:.4f}</td></tr>
+          <tr><td>Positive predictive value (Train / Test)</td><td class='num'>{TRAIN_METRICS_05["ppv"]:.4f} / {TEST_METRICS_05["ppv"]:.4f}</td></tr>
+          <tr><td>Negative predictive value (Train / Test)</td><td class='num'>{TRAIN_METRICS_05["npv"]:.4f} / {TEST_METRICS_05["npv"]:.4f}</td></tr>
+          <tr><td>F1 score (malignant; Train / Test)</td><td class='num'>{TRAIN_METRICS_05["f1"]:.4f} / {TEST_METRICS_05["f1"]:.4f}</td></tr>
         </tbody>
       </table>
       <p style="font-size:.74rem;color:{_MUTED};margin-top:8px;">
+        Training results are apparent performance after feature selection and refitting.
+        The test set is the held-out internal evaluation.
         Hosmer-Lemeshow test: {hl_interpretation}
         (χ²={HL_CHI2:.2f}, p={HL_P:.3f}).
         Brier skill = 1 − Brier/NullBrier =
@@ -2486,25 +2646,33 @@ def server(input, output, session):
       <h4>Stage 1 — LASSO Feature Selection</h4>
       <p>L1-penalized logistic regression (liblinear solver) was evaluated over 60
       log-spaced values of C ∈ [10⁻⁴, 10²] using 5-fold stratified
-      cross-validation with AUC as the selection criterion. The λ₁ₛₑ rule chooses
+      cross-validation with AUC as the selection criterion. RobustScaler is refit
+      within every training fold. These CV scores describe LASSO tuning and do not
+      validate the final refitted model. The λ₁ₛₑ rule chooses
       the most regularized model whose mean cross-validated AUC is within one
       standard error of the maximum. This selected {N_SEL} features at
       C = {C_1SE:.5f}; λ_min selected {NZ_MIN} features at C = {C_MIN:.5f}.</p>
 
       <h4>Stage 2 — Unpenalized Logistic Regression</h4>
       <p>An unpenalized logistic regression model (lbfgs solver) was refit using
-      the {N_SEL} LASSO-selected features. This refit reduces L1 shrinkage and makes
-      the coefficients easier to interpret, although post-selection estimates may
-      still be optimistic. All features enter the model on the RobustScaler-transformed
-      scale without further transformation.</p>
+      {len(DESIGN_COLS)} design terms derived from the {N_SEL} LASSO-selected inputs.
+      Training-only candidate screening selects transformations; the prespecified
+      GAM rule selects linear, centred quadratic, or cubic-spline forms.
+      The resulting design is robust-scaled before fitting. Basis coefficients
+      describe the transformed design and are not raw-input effect estimates.</p>
 
       <h4>Model Diagnostics</h4>
       <p>Linearity was assessed via a likelihood-ratio test (LRT) comparing a
       linear logistic GLM against a cubic spline alternative (df_extra = 3).
       At α = 0.10, {len(nonlinear_features)} features showed evidence of nonlinearity:
-      {nonlinear_summary}. These findings should be considered when interpreting the
-      current linear refit. Collinearity was quantified by the variance
-      inflation factor (VIF = 1 / (1 − R²)), computed on the scaled training set.</p>
+      {nonlinear_summary}. LRT results are reported separately from the GAM rule
+      used to select the applied functional forms. Preprocessing decisions and
+      fitted knots are recorded in eda_decisions.json. The VIF plot describes raw
+      inputs; the table above describes all fitted design terms.</p>
+      <p>The flexible, unpenalized refit shows a training-to-test calibration gap.
+      Apparent performance after selection is optimistic. These results have not
+      been externally validated, and the held-out test set was not used to tune
+      the model.</p>
 
       <h4>Calibration</h4>
       <p>The Hosmer-Lemeshow test (10 quantile-based risk groups, df = {HL_DF})

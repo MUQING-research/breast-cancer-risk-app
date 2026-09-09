@@ -97,11 +97,11 @@ def _display_name(feature: str) -> str:
 
 
 def _model_performance_figure(bundle: dict) -> None:
-    fig = plt.figure(figsize=(7.0, 5.25), dpi=300, layout="constrained")
+    fig = plt.figure(figsize=(7.0, 10.5), dpi=300)
     grid = fig.add_gridspec(
         2,
         2,
-        height_ratios=(1.0, 1.15),
+        height_ratios=(1.0, 2.3),
     )
 
     ax = fig.add_subplot(grid[0, 0])
@@ -192,7 +192,7 @@ def _model_performance_figure(bundle: dict) -> None:
     coefficients = np.asarray(bundle["LR_COEF"], dtype=float)
     order = np.argsort(coefficients)
     ordered_values = coefficients[order]
-    ordered_names = [bundle["SEL_COLS"][index].title() for index in order]
+    ordered_names = [bundle["DESIGN_COLS"][index] for index in order]
     colors = [
         SECONDARY_COLOR if value >= 0 else PRIMARY_COLOR
         for value in ordered_values
@@ -208,8 +208,8 @@ def _model_performance_figure(bundle: dict) -> None:
     ax.axvline(0, color=REFERENCE_COLOR, linewidth=0.8)
     ax.set_yticks(y_positions)
     ax.set_yticklabels(ordered_names)
-    ax.set_xlabel("Logistic regression coefficient for benign outcome")
-    _panel_title(ax, "C", "Fitted coefficients")
+    ax.set_xlabel("Scaled design-term coefficient for benign outcome")
+    _panel_title(ax, "C", "Fitted spline coefficients")
 
     coefficient_span = max(float(np.ptp(ordered_values)), 1.0)
     lower_limit = min(float(ordered_values.min()) - 0.65, -0.65)
@@ -226,7 +226,7 @@ def _model_performance_figure(bundle: dict) -> None:
             fontsize=8,
             color=TEXT_COLOR,
         )
-    _save_figure(fig, "model_performance.png", use_tight_layout=False)
+    _save_figure(fig, "model_performance.png")
 
 
 def _feature_selection_figure(bundle: dict) -> None:
@@ -345,25 +345,26 @@ def _linearity_figure(bundle: dict) -> None:
             edgecolors="none",
             zorder=3,
         )
-        if len(midpoints) > 2:
-            slope, intercept = np.polyfit(midpoints, empirical_logits, 1)
-            x_line = np.linspace(midpoints.min(), midpoints.max(), 100)
-            ax.plot(
-                x_line,
-                slope * x_line + intercept,
-                color=TEXT_COLOR,
-                linewidth=1.0,
-                linestyle="--",
-            )
+        ax.fill_between(plot_data["grid"], plot_data["gam_lower"],
+                        plot_data["gam_upper"], color=PRIMARY_COLOR, alpha=0.18)
+        ax.plot(plot_data["grid"], plot_data["gam_logit"],
+                color=PRIMARY_COLOR, linewidth=1.0)
+        ax.plot(
+            plot_data["grid"],
+            plot_data["linear_logit"],
+            color=TEXT_COLOR,
+            linewidth=1.0,
+            linestyle="--",
+        )
 
         result = bundle["LRT"][feature]
         is_linear = bool(result["linear"])
-        verdict = "Linear" if is_linear else "Non-linear"
+        verdict = bundle["EDA_DECISIONS"][feature]["functional_form"].title()
         verdict_color = TEXT_COLOR if is_linear else PRIMARY_COLOR
         ax.text(
             0.97,
             0.96,
-            f"p={result['p']:.3f}\n{verdict}",
+            f"LRT p={result['p']:.3f}\nApplied: {verdict}",
             transform=ax.transAxes,
             ha="right",
             va="top",
@@ -372,7 +373,7 @@ def _linearity_figure(bundle: dict) -> None:
         )
         ax.set_xlabel("Feature value")
         if index % 4 == 0:
-            ax.set_ylabel("Empirical log-odds")
+            ax.set_ylabel("Malignancy log-odds")
         _panel_title(ax, chr(ord("A") + index), _display_name(feature))
 
     summary_ax = axes.flat[-1]
@@ -417,7 +418,7 @@ def _linearity_figure(bundle: dict) -> None:
 
 
 def _vif_figure(bundle: dict) -> None:
-    ordered = sorted(bundle["VIF"].items(), key=lambda item: item[1], reverse=True)
+    ordered = sorted(bundle["RAW_VIF"].items(), key=lambda item: item[1], reverse=True)
     names = [_display_name(name) for name, _ in ordered]
     values = np.asarray([value for _, value in ordered], dtype=float)
     colors = [
@@ -457,7 +458,7 @@ def _vif_figure(bundle: dict) -> None:
     ax.set_yticklabels(names)
     ax.invert_yaxis()
     ax.set_xlabel("Variance inflation factor")
-    _panel_title(ax, "A", "Collinearity among retained predictors")
+    _panel_title(ax, "A", "Collinearity among raw retained inputs")
     ax.set_xlim(0, max(10.3, float(values.max()) * 1.22))
     for y_pos, value in zip(y_positions, values):
         ax.text(

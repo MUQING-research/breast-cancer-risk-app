@@ -41,13 +41,17 @@ Wisconsin Diagnostic Breast Cancer data (n = 569, 30 features)
                          |
               7 retained predictors
                          |
-     Unpenalized logistic regression refit on the
-       scaled training data using those predictors
+     Training-only transformations and cubic splines
+          28 design terms from the 7 inputs
+                         |
+        Robust scaling and unpenalized logistic refit
                          |
        Saved bundle -> Shiny prediction dashboard
 ```
 
-The tracked bundle was fitted on 455 training observations and evaluated on 114 held-out observations. Scaling, cross-validation, feature selection, and coefficient estimation use the training split only.
+The tracked bundle was fitted on 455 training observations and evaluated on 114 held-out observations. RobustScaler is fitted separately in every LASSO cross-validation fold. Transformation screening, spline knots, final scaling, and coefficient estimation use the training split only. LASSO tuning scores do not validate the final model after functional-form selection and refitting.
+
+The prespecified GAM effective-degrees-of-freedom rule selects a 3-knot cubic spline for each retained input. `area error` and `worst texture` first use `log1p`; `worst concavity` uses Yeo-Johnson; the remaining inputs use their original scale before spline construction. These seven inputs expand to 28 design terms. GAM smooth p-values are approximate association tests, not tests of nonlinearity; spline-versus-linear LRT results are recorded separately in `eda_decisions.json`.
 
 ### Selected predictors
 
@@ -87,8 +91,9 @@ The following values describe the checked-in bundle and its fixed 80/20 split. T
 
 | Metric | Train | Test |
 |---|---:|---:|
-| ROC AUC | 0.997 | 0.995 |
-| Brier score | 0.014 | 0.030 |
+| ROC AUC | 0.999 | 0.991 |
+| Brier score | 0.0057 | 0.0464 |
+| Accuracy at 0.50 | 0.993 | 0.947 |
 
 Test-set classification at `P(malignant) >= 0.50`:
 
@@ -101,7 +106,7 @@ Test-set classification at `P(malignant) >= 0.50`:
 | Negative predictive value | 0.985 |
 | F1 score for malignancy | 0.932 |
 
-The test-set confusion matrix contains 41 true positives, 67 true negatives, 5 false positives, and 1 false negative when malignancy is treated as the positive class. The test Brier score is 0.030 versus 0.233 for the training-prevalence null model. The Hosmer-Lemeshow result is chi-square = 3.37 with 8 degrees of freedom and `p = 0.909`; this does not provide evidence of lack of fit in this small held-out sample.
+The test-set confusion matrix contains 41 true positives, 67 true negatives, 5 false positives, and 1 false negative when malignancy is treated as the positive class. The test Brier score is 0.0464 versus 0.2327 for the training-prevalence null model. The grouped Hosmer-Lemeshow statistic is 2589.47 with 5 degrees of freedom and `p < 0.001`. Extreme predicted probabilities and sparse expected counts make that asymptotic test unreliable; the train/test Brier difference and calibration curves also show a calibration concern. The test set was not used to select a replacement model or tune its settings.
 
 ### Model evaluation figures
 
@@ -109,7 +114,7 @@ The figures below are rendered from the checked-in `bc_bundle.pkl`, so they corr
 
 #### Discrimination, calibration, and fitted coefficients
 
-Panel A compares the train and held-out test ROC curves. Panel B shows train/test calibration and Brier scores. Panel C shows the fitted logistic-regression coefficients after robust scaling; positive coefficients increase `P(benign)`, whereas negative coefficients increase `P(malignant)`.
+Panel A compares the train and held-out test ROC curves. Panel B shows train/test calibration and Brier scores. Panel C shows the 28 fitted spline-basis coefficients after robust scaling. Individual basis coefficients are not raw-input effects; their joint contribution defines each input's fitted curve.
 
 ![Train and test ROC curves, calibration, and fitted logistic-regression coefficients](assets/model_performance.png)
 
@@ -121,22 +126,22 @@ Panel A shows the regularization paths, and Panel B shows the five-fold cross-va
 
 #### Functional-form diagnostics
 
-Empirical training-set log-odds are shown for each retained predictor. The spline-versus-linear likelihood-ratio tests flag `worst texture` and `worst concavity` as non-linear at `alpha = 0.10`.
+Empirical training-set log-odds, GAM curves with 95% intervals, and linear references are shown for each retained predictor. On the selected transformation scale, LRTs flag `worst texture`, `worst concavity`, and `worst symmetry` at `alpha = 0.10`. The applied forms follow the separately documented GAM rule.
 
 ![Log-odds functional-form diagnostics for retained predictors](assets/model_linearity_diagnostics.png)
 
 #### Collinearity diagnostics
 
-Variance inflation factors are shown for the seven retained predictors, with reference lines at VIF 5 and VIF 10.
+Variance inflation factors are shown for the seven raw retained inputs, with reference lines at VIF 5 and VIF 10. The application Methods table additionally reports VIF for all 28 design terms; within-variable spline bases are strongly correlated.
 
 ![Variance inflation factors for retained predictors](assets/model_vif_diagnostics.png)
 
 ## Run locally
 
-Python 3.11 or newer is recommended.
+Use Python 3.13 (the bundles and deployment use Python 3.13.9).
 
 ```bash
-git clone https://github.com/MUQING-create/breast-cancer-risk-app.git
+git clone https://github.com/MUQING-research/breast-cancer-risk-app.git
 cd breast-cancer-risk-app
 
 python -m venv .venv
@@ -166,6 +171,8 @@ Open the local URL printed by Shiny, normally `http://127.0.0.1:8000`.
 
 The app loads `bc_bundle.pkl` at startup. Keep that file beside `breast_cancer_app.py` when packaging or deploying the application.
 
+For an offline rebuild, install `pygam==0.12.0` and `statsmodels==0.14.5`, then run `python rebuild_bundle.py`. The training helper exports the cleaned table, dictionary, diagnostic PNGs, design matrices, and decision log into `.cache/training/`. These local row-level exports are excluded from deployment and Git. Reproduce the runtime checks with `python -m unittest test_model_contract -v`.
+
 ## Batch prediction
 
 Upload a CSV containing all seven retained feature columns. Additional columns are preserved in the downloaded result.
@@ -180,7 +187,7 @@ The exported file appends:
 - `P_benign`
 - `Prediction`
 
-Column names are case-sensitive. The current interface verifies required columns but does not replace clinical data validation; users remain responsible for checking units, plausible ranges, missing values, and data provenance.
+Column names are case-sensitive. The interface checks required columns, numeric types, finite values, non-negative measurements, and empty uploads. Users must still verify measurement units and data provenance.
 
 ## Deployment
 
@@ -191,21 +198,25 @@ python -m pip install rsconnect-python
 python deploy.py
 ```
 
-Configure `rsconnect` credentials before running the helper. It deploys the application as `medictio/breast-cancer-classifier` and includes the precomputed bundle.
+Configure `rsconnect` credentials before running the helper from the Python 3.13 environment matching `requirements.txt`. Run `python deploy.py --check` for a local preflight. The helper updates the existing `medictio/breast-cancer-classifier` app, checks pinned package versions, and uploads only the runtime file allowlist, including the precomputed bundle and stylesheet.
 
 For any alternative container or hosting workflow, package at least:
 
 - `app.py`
 - `breast_cancer_app.py`
 - `bc_bundle.pkl`
+- `eda_decisions.json`
 - `requirements.txt`
+- `theme.css`
 - `world.geojson` if the visitor map is enabled
 
 Do not replace the deployment bundle with raw training records. The tracked bundle contains fitted estimators, preprocessing statistics, predictions, outcome labels, metrics, and plot data, but no `X_train`, `X_test`, or full patient-level feature table.
 
 ## Optional visitor analytics
 
-The dashboard can optionally render aggregate visit statistics through Supabase and locate public IP addresses through IPinfo or the `ipwho.is` fallback. Analytics are disabled unless both `SUPABASE_URL` and `SUPABASE_KEY` are configured. When enabled, hosted visitors should be informed that country, city, latitude, and longitude may be recorded for this map.
+The dashboard can optionally render aggregate visit statistics through Supabase and locate public IP addresses through IPinfo or the `ipwho.is` fallback. Remote persistence requires both `SUPABASE_URL` and `SUPABASE_KEY`; without them, the app uses a bounded process-local visit list that resets on restart. Hosted visitors should be informed when location lookup is enabled.
+
+The shinyapps.io deployment helper does not forward environment variables: that platform does not support `rsconnect --environment` management. Container hosts can inject the variables below. See the [Posit deployment documentation](https://docs.posit.co/rsconnect-python/deploying/).
 
 The application code does not persist prediction form values or uploaded CSV contents. Analytics settings are supplied through environment variables:
 
@@ -222,6 +233,11 @@ The application code does not persist prediction form values or uploaded CSV con
 |-- app.py                 # Minimal Shiny entry point
 |-- breast_cancer_app.py   # Model loading, UI, server, plots, and analytics
 |-- bc_bundle.pkl          # Precomputed model and evaluation bundle
+|-- eda_decisions.json     # Training-only preprocessing decisions and provenance
+|-- rebuild_bundle.py     # Offline training and local audit exports
+|-- training_eda.py       # Training-only transformation and functional-form screening
+|-- test_model_contract.py # Regression tests for the model and data contract
+|-- theme.css             # Active application stylesheet
 |-- generate_readme_figures.py  # Reproducible README figure generator
 |-- assets/                # Application screenshot and model figures used in this README
 |-- requirements.txt       # Runtime dependencies
@@ -236,8 +252,8 @@ The application code does not persist prediction form values or uploaded CSV con
 - The model is trained on a small, classic benchmark dataset rather than a contemporary prospective cohort.
 - Performance is reported from one stratified holdout split; there is no nested validation, external validation, temporal validation, or site-level validation.
 - The dataset does not represent the full clinical diagnostic pathway, prevalence, spectrum of disease, acquisition variability, or downstream consequences of errors.
-- The saved diagnostics flag non-linearity at `alpha = 0.10` for `worst texture` and `worst concavity`; the deployed final model nevertheless enters all seven predictors linearly.
-- VIF is moderate for `worst area` and `worst concave points`, so individual coefficient interpretations should remain cautious.
+- The flexible unpenalized spline refit has near-perfect apparent discrimination and a substantial train/test calibration gap. High AUC does not establish reliable absolute probabilities.
+- VIF is moderate for raw `worst area` and `worst concave points`, and substantially larger for correlated spline basis terms. Individual basis coefficients should not be interpreted as raw-input effects.
 - The default threshold is illustrative and has not been selected from clinical costs, decision-curve analysis, or a prespecified deployment population.
 
 ## Data attribution

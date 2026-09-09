@@ -1,29 +1,45 @@
-"""
-upload.py — Push hf_breast_cancer to HuggingFace Space
-Usage: python upload.py [message]
-"""
+"""Upload a complete runtime package to the existing Hugging Face Space."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
-from huggingface_hub import HfApi
+
+from huggingface_hub import CommitOperationAdd, HfApi
 
 REPO_ID = "muqing-research/breast-cancer-classification"
-FILES   = [
-    "breast_cancer_app.py", "theme.css", "app.py", "requirements.txt",
+FILES = (
+    "app.py",
+    "breast_cancer_app.py",
+    "bc_bundle.pkl",
+    "eda_decisions.json",
+    "theme.css",
+    "world.geojson",
+    "requirements.txt",
     "Dockerfile",
-]
+)
 
-msg = sys.argv[1] if len(sys.argv) > 1 else "Update"
-api = HfApi()
-folder = Path(__file__).parent
 
-for f in FILES:
-    api.upload_file(
-        path_or_fileobj=str(folder / f),
-        path_in_repo=f,
+def main() -> None:
+    folder = Path(__file__).resolve().parent
+    missing = [name for name in FILES if not (folder / name).is_file()]
+    if missing:
+        raise RuntimeError("Missing deployment files: " + ", ".join(missing))
+    message = sys.argv[1] if len(sys.argv) > 1 else "Update application and model bundle"
+    api = HfApi()
+    api.repo_info(repo_id=REPO_ID, repo_type="space")
+    # One commit keeps application code, stylesheet, and model versions together.
+    api.create_commit(
         repo_id=REPO_ID,
         repo_type="space",
-        commit_message=msg,
+        operations=[
+            CommitOperationAdd(path_in_repo=name, path_or_fileobj=str(folder / name))
+            for name in FILES
+        ],
+        commit_message=message,
     )
-    print(f"  uploaded: {f}")
+    print(f"Uploaded {len(FILES)} files: https://huggingface.co/spaces/{REPO_ID}")
 
-print(f"\nDone — https://huggingface.co/spaces/{REPO_ID}")
+
+if __name__ == "__main__":
+    main()
