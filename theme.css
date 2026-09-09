@@ -611,6 +611,9 @@ body { height: auto; min-height: 100vh; }
 .plot-frame.plot-map img { width: 100% !important; height: auto !important; max-height: none !important; }
 .infobar { gap: 10px; }
 .metric-chip { min-width: 0; padding: 12px !important; border-radius: 8px !important; }
+.chip { min-width: 0; padding: 12px; border-radius: 8px; }
+.chip-lbl { font-size: .64rem; letter-spacing: .4px; white-space: normal; overflow-wrap: anywhere; }
+.chip-val { overflow-wrap: anywhere; }
 .mc-label { letter-spacing: .35px !important; font-size: .65rem !important; }
 .mc-value { font-size: 1.22rem !important; }
 .note-grid { gap: 16px; margin-top: 10px; }
@@ -672,4 +675,8 @@ body { height: auto; min-height: 100vh; }
   .metric-chip { padding: 10px 8px !important; }
   .mc-value { font-size: 1.1rem !important; }
   .tbl td, .tbl th, .prob-tbl td, .prob-tbl th { padding: 9px 7px; }
+}
+@media (max-width: 360px) {
+  .prediction-results .infobar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prediction-results .chip:last-child { grid-column: 1 / -1; }
 }
