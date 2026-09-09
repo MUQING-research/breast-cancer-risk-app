@@ -38,7 +38,8 @@ CELL_COLORS = [
 
 
 def canvas(title, wide=False):
-    fig, ax = plt.subplots(figsize=(7.0 if wide else 3.5, 3.5))
+    # Compact UI renditions keep publication typography without empty gutters.
+    fig, ax = plt.subplots(figsize=(7.0, 2.8) if wide else (3.5, 3.0))
     ax.set_title(title, loc="left", pad=10)
     ax.spines[["top", "right", "bottom", "left"]].set_visible(True)
     ax.tick_params(direction="out")
@@ -50,9 +51,10 @@ def finish(fig, caption):
     """Reserve a real caption region inside the image, outside the data axes."""
     wide = fig.get_figwidth() > 5
     caption_lines = textwrap.fill(caption, width=112 if wide else 53)
-    footer = 0.16 if wide else 0.20
-    fig.tight_layout(pad=0.9, rect=(0, footer, 1, 1))
-    fig.text(0.05, 0.035, caption_lines, ha="left", va="bottom",
+    lines = len(caption_lines.splitlines())
+    footer = (lines * 10.4 + 7) / (72 * fig.get_figheight())
+    fig.tight_layout(pad=0.65, rect=(0, footer, 1, 1))
+    fig.text(0.04, 0.025, caption_lines, ha="left", va="bottom",
              fontsize=8, linespacing=1.3, color=CELL_COLORS[3])
     return fig
 
@@ -85,7 +87,7 @@ def roc_figure(data):
            ylabel="Sensitivity")
     legend(ax, loc="lower right")
     return finish(fig, f"WDBC | Train n={data['N_TRAIN']}; test n={data['N_TEST']}. "
-                  "The dotted diagonal is chance discrimination.")
+                  "Dotted line: chance.")
 
 
 def calibration_figure(data):
@@ -105,8 +107,7 @@ def calibration_figure(data):
     ax.set(xlim=(0, 1), ylim=(0, 1.04),
            xlabel="Predicted malignancy probability", ylabel="Observed malignant fraction")
     legend(ax, loc="upper left")
-    return finish(fig, "WDBC | 10 quantile bins per split. The dotted diagonal "
-                  "indicates perfect calibration; lower Brier is better.")
+    return finish(fig, "WDBC | 10 quantile bins per split. Dotted line: perfect calibration.")
 
 
 def path_figure(data, feature):
@@ -123,8 +124,7 @@ def path_figure(data, feature):
                linewidth=1, label="Selected C (1-SE)")
     ax.set(xlabel="log10(C)", ylabel="Standardized coefficient")
     legend(ax, loc="upper left")
-    return finish(fig, "WDBC | Training only. Highlight: selected input; faint "
-                  "curves: other candidates. Change the input above to inspect its path.")
+    return finish(fig, "WDBC training | Highlight: selected input; faint curves: other candidates.")
 
 
 def cv_figure(data):
@@ -139,8 +139,8 @@ def cv_figure(data):
                linestyle=":", label="Best mean AUC")
     ax.set(xlabel="log10(C)", ylabel="Cross-validated AUC")
     legend(ax, loc="lower right")
-    return finish(fig, f"WDBC | Training only; band = +/- 1 SE. "
-                  f"The 1-SE rule retains {data['N_SEL']} of {len(data['FEAT_NAMES'])} raw inputs.")
+    return finish(fig, f"WDBC training | Band: +/- 1 SE. "
+                  f"The 1-SE rule retains {data['N_SEL']}/{len(data['FEAT_NAMES'])} inputs.")
 
 
 def linearity_figure(data, feature):
@@ -176,8 +176,7 @@ def vif_figure(data):
     ax.axvline(10, color=CELL_COLORS[2], linestyle=":", linewidth=1, label="VIF = 10")
     ax.set_xlabel("Variance inflation factor")
     legend(ax, loc="lower right")
-    return finish(fig, "WDBC | Training inputs before spline expansion. "
-                  "Full design-matrix VIF values are available in Methods.")
+    return finish(fig, "WDBC training | Raw inputs. Spline-expanded design VIF: see Methods.")
 
 
 def threshold_figure(data, threshold):
@@ -190,5 +189,5 @@ def threshold_figure(data, threshold):
                label=f"Cutoff = {threshold:.2f}")
     ax.set(xlim=(0, 1), xlabel="Predicted malignancy probability", ylabel="Cases")
     legend(ax, loc="upper center")
-    return finish(fig, f"WDBC | Training n={data['N_TRAIN']}. "
-                  "Probabilities at or above the cutoff are classified as malignant.")
+    return finish(fig, f"WDBC training n={data['N_TRAIN']} | "
+                  f"P(malignant) >= {threshold:.2f} is classified malignant.")

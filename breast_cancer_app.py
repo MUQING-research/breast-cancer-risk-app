@@ -1718,17 +1718,24 @@ def _note_block(title: str, copy: str) -> ui.Tag:
 def _input_panel():
     fields = _make_inputs()
     return ui.tags.aside(
-        ui.tags.div("CASE INPUTS", class_="input-eyebrow"),
-        ui.tags.h4("Describe the sample", class_="input-title"),
-        ui.tags.p("Start with training medians, then enter this sample's measurements.",
+        ui.tags.h4("Sample measurements", class_="input-title"),
+        ui.tags.p("Defaults are based on training-set medians.",
                   class_="input-copy"),
-        ui.tags.div("Size & texture", class_="input-group-label"),
-        ui.tags.div(*fields[:3], class_="input-grid"),
-        ui.tags.div("Shape & surface", class_="input-group-label"),
-        ui.tags.div(*fields[3:], class_="input-grid"),
+        ui.tags.div("Size", class_="input-group-label"),
+        ui.tags.div(fields[0], fields[2], class_="input-grid"),
+        ui.tags.div("Texture & shape", class_="input-group-label"),
+        ui.tags.div(fields[1], *fields[3:], class_="input-grid"),
         ui.input_action_button("submit", "Run Prediction", class_="btn btn-primary w-100"),
         ui.tags.p("Inputs are applied when you run the prediction.", class_="input-hint"),
         class_="input-panel", **{"aria-label": "Prediction inputs"},
+    )
+
+
+def _view_notes(*notes):
+    return ui.tags.details(
+        ui.tags.summary("Reading guide"),
+        ui.tags.div(*notes, class_="note-grid"),
+        class_="detail-panel view-notes",
     )
 
 
@@ -1786,27 +1793,15 @@ app_ui = ui.page_fluid(
                 _input_panel(),
                 ui.tags.div(
                     ui.output_ui("pred_chips"),
-                    ui.layout_columns(
-                ui.card(
-                    ui.card_header("Estimated Probability of Malignancy"),
-                    ui.tags.div(
-                        ui.output_ui("pred_gauge"),
-                        class_="result-frame result-gauge",
-                    ),
-                    class_="equal-card",
-                ),
-                ui.card(
-                    ui.card_header("Feature Values vs. Training Medians"),
-                    ui.tags.div(ui.output_ui("feat_table"), class_="result-frame result-gauge"),
-                    class_="equal-card",
-                ),
-                col_widths=[5, 7],
+                    ui.card(
+                        ui.card_header("Feature Values vs. Training Medians"),
+                        ui.output_ui("feat_table"),
                     ),
                     class_="prediction-results",
                 ),
                 class_="prediction-workspace",
             ),
-            ui.tags.div(
+            _view_notes(
                 _note_block(
                     "Classification rule",
                     "The default rule classifies a case as malignant when P(malignant) ≥ 0.50. The Decision Threshold tab shows how other cutoffs change performance.",
@@ -1819,7 +1814,6 @@ app_ui = ui.page_fluid(
                     "Intended use",
                     "This tool is intended for research and education. It illustrates model behavior and must not replace clinical assessment.",
                 ),
-                class_="note-grid",
             ),
             ui.tags.details(
                 ui.tags.summary("Visitor activity"),
@@ -1855,7 +1849,7 @@ app_ui = ui.page_fluid(
                 "Score a cohort from a CSV file",
                 "Upload a CSV file, verify the required columns, review the first 20 results, and download the complete scored dataset.",
             ),
-            ui.tags.div(
+            _view_notes(
                 _note_block(
                     "CSV schema",
                     "The uploaded file must contain every retained feature column required by the deployed model.",
@@ -1868,7 +1862,6 @@ app_ui = ui.page_fluid(
                     "Downloaded output",
                     "The downloaded file retains the original columns and adds probabilities for the malignant and benign classes, plus the predicted class.",
                 ),
-                class_="note-grid",
             ),
             ui.layout_columns(
                 ui.card(
@@ -1901,7 +1894,7 @@ app_ui = ui.page_fluid(
                 "Explore classification trade-offs",
                 "Use the training-set score distribution to see how alternative probability cutoffs change sensitivity, specificity, and classification errors.",
             ),
-            ui.tags.div(
+            _view_notes(
                 _note_block(
                     "Why it matters",
                     "Changing the threshold trades sensitivity against specificity. The confusion matrix and performance metrics update together.",
@@ -1914,7 +1907,6 @@ app_ui = ui.page_fluid(
                     "Default baseline",
                     "Metrics elsewhere in the app use the default 0.50 threshold unless stated otherwise.",
                 ),
-                class_="note-grid",
             ),
             ui.layout_columns(
                 ui.card(
@@ -2162,37 +2154,11 @@ def server(input, output, session):
             f'<span class="chip-val" style="color:{CLR_BEN};">{p_ben*100:.1f}%</span></div>'
             f'<div class="chip" style="--tile:{clr};--tint:{_tint};">'
             f'<span class="chip-lbl">Classification</span>'
-            f'<span class="chip-val" style="color:{clr};">{cls}</span></div>'
+            f'<span class="chip-val" style="color:{clr};">{cls}</span>'
+            '<span class="chip-detail">Malignancy cutoff: 0.50</span></div>'
         )
         return ui.HTML(f'<div class="infobar">{chips}</div>')
 
-    @render.ui
-    def pred_gauge():
-        p_ben = _patient_prob()
-        p_mal = 1.0 - p_ben
-        cls  = "Malignant" if p_mal >= 0.5 else "Benign"
-        clr  = CLR_MAL if p_mal >= 0.5 else CLR_BEN
-        pct  = p_mal * 100
-        badge_bg = "#FAF1F2" if p_mal >= 0.5 else "#EEF6F4"
-        return ui.HTML(f"""
-<div class="prob-gauge">
-  <div class="prob-num" style="color:{clr};">{pct:.1f}%</div>
-  <div class="prob-label">Predicted probability of malignancy</div>
-  <div class="prob-bar-wrap">
-    <div class="prob-bar-fill"
-         style="width:{pct:.1f}%;background:{clr};"></div>
-  </div>
-  <div>
-    <span class="class-badge"
-          style="background:{badge_bg};color:{clr};border:2px solid {clr};">
-      {cls}
-    </span>
-  </div>
-  <div style="font-size:.68rem;color:{_MUTED};margin-top:10px;">
-    Classification threshold: 0.50
-  </div>
-</div>
-""")
 
     @render.ui
     def feat_table():
