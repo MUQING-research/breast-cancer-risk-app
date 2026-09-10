@@ -2606,11 +2606,11 @@ def server(input, output, session):
       used to select the applied functional forms. Preprocessing decisions and
       fitted knots are recorded in eda_decisions.json. The VIF plot describes raw
       inputs; the table above describes all fitted design terms.</p>
-      </section>
       <p>The flexible, unpenalized refit shows a training-to-test calibration gap.
       Apparent performance after selection is optimistic. These results have not
       been externally validated, and the held-out test set was not used to tune
       the model.</p>
+      </section>
 
       <section class="method-section">
       <h4>Calibration</h4>
