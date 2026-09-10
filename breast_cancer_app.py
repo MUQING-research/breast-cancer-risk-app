@@ -1151,6 +1151,515 @@ def _make_visit_map_bc(visits, user_lat=None, user_lon=None,
 
 
 # ── 4. CSS ───────────────────────────────────────────────────────────────────
+_CSS = """
+
+:root{
+  --red:#E64B35;--blue:#4DBBD5;--teal:#00A087;--navy:#3C5488;--salmon:#F39B7F;
+  --lav:#8491B4;--mint:#91D1C2;--crimson:#DC0000;--brown:#7E6148;--tan:#B09C85;
+  --ink:#1E293B;--muted:#64748B;--surface:#FFFFFF;--bg:#FFFFFF;
+  --line:#E2E8F0;--line-strong:#CBD5E1;
+  --accent:#E64B35;--accent-dark:#DC0000;
+  --r:8px;--rs:6px;
+  --font:'Arial','Helvetica Neue',Helvetica,'Liberation Sans','DejaVu Sans',sans-serif;
+  --serif:'Arial','Helvetica Neue',Helvetica,'Liberation Sans',sans-serif;
+}
+html,body{
+  height:100%;
+  font-family:var(--font);
+  font-size:15px;
+  font-variant-numeric:tabular-nums;
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+/* Masthead — Cell red clinical theme. */
+.navbar{
+  background:#DC0000!important;
+  border-bottom:none!important;
+  box-shadow:0 4px 14px rgba(109,40,217,.25)!important;
+  padding:.9rem 1.5rem;
+}
+.navbar::after{display:none;}
+.navbar-brand{
+  color:#FFFFFF!important;
+  font-weight:800;
+  font-size:1.05rem;
+  letter-spacing:.2px;
+}
+.navbar-brand::before{
+  content:"";
+  display:inline-block;
+  width:10px;height:10px;
+  background:#FFFFFF;
+  border-radius:2px;
+  margin-right:.6rem;
+}
+/* Sidebar */
+.bslib-sidebar-layout>.sidebar{
+  background:#FBF9FF!important;
+  border-right:1px solid var(--line)!important;
+  box-shadow:none!important;
+  overflow-y:auto;
+  height:100%;
+  padding:1.15rem 1.25rem 1.6rem;
+}
+.sec{
+  font-size:.68rem;
+  font-weight:800;
+  color:#5B21B6;
+  text-transform:uppercase;
+  letter-spacing:1.8px;
+  margin:1.3rem 0 .75rem;
+  padding:0 0 .3rem .7rem;
+  border-left:3px solid var(--accent);
+  line-height:1.35;
+}
+.sec:first-child{margin-top:.2rem;}
+/* Forms */
+.form-label{font-size:.88rem;font-weight:700;color:#5B21B6;margin-bottom:.42rem;display:block;}
+.form-control,.form-select{
+  font-size:.86rem;
+  border:1px solid var(--line-strong);
+  border-radius:var(--rs);
+  background:var(--surface);
+  padding:.7rem .86rem;
+  min-height:2.95rem;
+  color:var(--ink);
+  box-shadow:none;
+  transition:border-color .16s,box-shadow .16s;
+}
+.form-control:focus,.form-select:focus{
+  border-color:var(--accent);
+  background:white;
+  box-shadow:0 0 0 3px rgba(124,58,237,.15);
+  outline:none;
+}
+/* Buttons — flat, journal-adjacent */
+.btn-primary{
+  background:var(--accent)!important;
+  border:none!important;
+  border-radius:var(--rs)!important;
+  color:#FFFFFF!important;
+  font-size:.78rem!important;
+  font-weight:800!important;
+  letter-spacing:.9px;
+  text-transform:uppercase;
+  padding:.8rem 1rem!important;
+  box-shadow:none!important;
+}
+.btn-primary:hover{background:var(--accent-dark)!important;transform:none!important;}
+.btn-sm{font-size:.78rem!important;padding:.65rem .95rem!important;}
+/* Ion range slider */
+.irs{height:44px;}.irs-with-grid{height:60px;}
+.irs-line{height:6px!important;background:var(--line)!important;border:none!important;border-radius:999px;top:28px;}
+.irs-bar,.irs-bar-edge{height:6px!important;background:var(--accent)!important;border:none!important;top:28px;}
+.irs-bar-edge{width:6px!important;}
+.irs-handle{
+  width:18px!important;height:18px!important;background:white!important;
+  border:3px solid var(--accent)!important;border-radius:50%!important;top:22px!important;
+  box-shadow:none!important;cursor:grab;
+}
+.irs-handle:hover,.irs-handle.state_hover{transform:scale(1.1)!important;}
+.irs-single{background:#5B21B6!important;color:white;font-size:.78rem;font-weight:700;padding:4px 9px;border-radius:4px;}
+.irs-single::before{border-top-color:#5B21B6!important;}
+.irs-from,.irs-to{display:none!important;}
+.irs-grid-pol{background:var(--line-strong)!important;}
+.irs-grid-text{font-size:.72rem!important;color:var(--muted)!important;}
+/* Main column */
+.bslib-sidebar-layout>.main{padding:clamp(18px,2.6vw,30px)!important;}
+.card-body{padding:clamp(14px,1.7vw,20px)!important;}
+/* Hero */
+.hero-copy{margin-bottom:1.1rem;}
+.hero-kicker{
+  font-size:.64rem;
+  font-weight:800;
+  color:var(--accent);
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:.35rem;
+}
+.page-title{
+  font-family:var(--font);
+  font-size:clamp(1.6rem,2vw,2.05rem);
+  font-weight:800;
+  color:#5B21B6;
+  display:inline-block;
+  margin:.15rem 0 .3rem;
+  letter-spacing:0;
+  position:relative;
+}
+.page-title::after{
+  content:"";
+  display:block;
+  height:3px;
+  width:min(100%,22rem);
+  background:var(--accent);
+  border-radius:999px;
+  margin-top:.6rem;
+}
+.page-subtitle{
+  color:var(--muted);
+  font-size:.84rem;
+  margin-bottom:1.25rem;
+  line-height:1.62;
+  max-width:70rem;
+}
+/* Cards — flat panels with hairline rules */
+.card{
+  border:1px solid #E9D5FF!important;
+  border-radius:var(--r)!important;
+  box-shadow:none!important;
+  background:var(--surface)!important;
+  overflow:hidden;
+  margin-bottom:16px;
+  position:relative;
+}
+.card::before{display:none;}
+.card-header{
+  background:#FAF8FF!important;
+  border-bottom:1px solid #EDE9FE!important;
+  border-left:3px solid var(--accent);
+  color:#5B21B6!important;
+  font-weight:800;
+  font-size:.86rem;
+  letter-spacing:.2px;
+  padding:.8rem 1.1rem;
+}
+/* Key-result blocks — flat white, coloured values */
+.infobar{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;}
+.chip{
+  background:var(--surface);
+  border:1px solid #E9D5FF;
+  border-top:2px solid var(--accent);
+  border-radius:var(--r);
+  padding:.88rem 1rem;
+  display:flex;
+  flex-direction:column;
+  gap:.25rem;
+}
+.chip-lbl{font-size:.62rem;font-weight:800;color:#6D28D9;text-transform:uppercase;letter-spacing:1px;}
+.chip-val{font-size:1rem;font-weight:800;color:var(--ink);white-space:nowrap;}
+.summary-grid,.note-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 16px;}
+.summary-tile{
+  position:relative;
+  overflow:hidden;
+  background:var(--surface);
+  border:1px solid #E9D5FF;
+  border-top:2px solid var(--accent);
+  border-radius:var(--r);
+  padding:14px 14px 12px;
+}
+.summary-tile.accent-blue{--tile-ink:#0E7490;}
+.summary-tile.accent-teal{--tile-ink:#7E22CE;}
+.summary-tile.accent-navy{--tile-ink:#6D28D9;}
+.summary-tile.accent-salmon{--tile-ink:#BE185D;}
+.summary-tile.accent-crimson{--tile-ink:#B91C1C;}
+.summary-label{font-size:.64rem;font-weight:800;color:#6D28D9;text-transform:uppercase;letter-spacing:1px;}
+.summary-value{font-size:1.24rem;font-weight:800;color:var(--tile-ink,var(--ink));line-height:1.1;margin-top:8px;}
+.summary-detail{font-size:.78rem;color:var(--muted);line-height:1.48;margin-top:7px;}
+.section-head{display:flex;flex-direction:column;gap:4px;margin:0 0 14px;}
+.section-eyebrow{font-size:.64rem;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:1.6px;}
+.section-title{margin:0;font-size:1.08rem;font-weight:800;color:#5B21B6;}
+.section-copy{margin:0;max-width:60rem;font-size:.82rem;line-height:1.55;color:var(--muted);}
+.note-block{
+  background:var(--surface);
+  border:0;
+  border-left:3px solid var(--accent);
+  padding:9px 12px;
+}
+.note-title{font-size:.72rem;font-weight:800;color:#5B21B6;text-transform:uppercase;letter-spacing:.7px;}
+.note-copy{margin:6px 0 0;font-size:.78rem;line-height:1.5;color:var(--muted);}
+/* Tabs — flat journal section tabs */
+.nav-tabs{
+  border:0!important;
+  border-bottom:1px solid #DDD6FE!important;background:#FBF9FF!important;
+  margin-bottom:20px;
+  gap:4px;
+  flex-wrap:wrap;
+}
+.nav-tabs .nav-link{
+  color:#7E22CE!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  font-size:.78rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.6px;
+  padding:.6rem .95rem!important;
+  margin-bottom:-1px;
+  transition:color .14s,border-color .14s;
+}
+.nav-tabs .nav-link:hover{color:var(--ink)!important;background:#F5F3FF!important;transform:none!important;}
+.nav-tabs .nav-link.active{
+  color:var(--ink)!important;
+  font-weight:800;
+  background:transparent!important;
+  border-bottom:2px solid var(--accent)!important;
+  box-shadow:none!important;
+}
+/* Tables — journal rules (thick top, header hairline, no fills) */
+.tbl{width:100%;border-collapse:collapse;font-size:.82rem;}
+.tbl th{
+  text-align:left;color:#5B21B6;font-weight:800;padding:.7rem .7rem;
+  background:#FAF8FF;
+  border-top:2px solid #475569;
+  border-bottom:1px solid #475569;
+  font-size:.62rem!important;text-transform:uppercase;
+  letter-spacing:.8px;white-space:nowrap;
+}
+.tbl td{padding:.7rem .7rem;border-bottom:1px solid #F1F5F9;
+  font-variant-numeric:tabular-nums;font-size:.82rem!important;}
+.tbl td.num{text-align:right;font-weight:700;}
+.tbl tr:hover td{background:#FAF5FF;}
+/* Plot & figure frames — uniform sizing and spacing */
+.plot-frame{
+  width:100%;
+  height:clamp(220px,18vw,280px);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  padding:8px;
+  box-sizing:border-box;
+}
+.plot-frame.plot-map{height:clamp(220px,22vw,280px);}
+.plot-frame.plot-wide{height:clamp(240px,22vw,320px);}
+.plot-frame .shiny-plot-output{width:100%!important;height:100%!important;}
+.plot-frame .shiny-plot-output img,.plot-frame .shiny-plot-output canvas{
+  width:100%!important;height:100%!important;max-width:100%!important;
+  max-height:100%!important;object-fit:contain!important;object-position:center center!important;
+}
+.figure-frame{
+  width:100%;
+  height:clamp(190px,15vw,240px);
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  padding:8px;
+  box-sizing:border-box;
+}
+.figure-frame.figure-frame-wide{height:clamp(250px,22vw,320px);}
+.figure-frame .shiny-html-output{
+  width:100%!important;height:100%!important;
+  display:flex;align-items:center;justify-content:center;
+}
+.figure-frame .shiny-html-output img{
+  max-width:100%!important;max-height:100%!important;
+  width:auto!important;height:auto!important;object-fit:contain!important;
+  border:1px solid #E9D5FF;
+  border-radius:4px;
+}
+.figure-caption{
+  font-size:.74rem;
+  color:var(--muted);
+  line-height:1.5;
+  border-top:1px solid #E9D5FF;
+  padding-top:.5rem;
+  margin:.45rem 0 0;
+}
+.equal-card{height:100%;display:flex;flex-direction:column;}
+.equal-card .card-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+.equal-card .plot-frame{flex:0 0 auto;}
+.plot-frame,.result-frame{flex:1 1 auto;min-height:0;}
+.result-frame{display:flex;flex-direction:column;justify-content:flex-start;}
+.result-frame.result-map{min-height:clamp(220px,22vw,280px);}
+.result-frame.result-gauge{min-height:clamp(220px,20vw,280px);}
+/* Probability gauge */
+.prob-gauge{text-align:center;padding:1rem 0 .85rem;}
+.prob-num{font-size:clamp(2.3rem,3.4vw,3rem);font-weight:800;line-height:1.0;}
+.prob-label{font-size:.8rem;color:var(--muted);margin-top:.4rem;}
+.prob-bar-wrap{
+  background:#EDE9FE;
+  border-radius:999px;
+  height:12px;
+  margin:14px 22px 10px;
+  overflow:hidden;
+}
+.prob-bar-fill{height:100%;border-radius:999px;transition:width .3s;}
+.class-badge{
+  display:inline-block;
+  padding:.5rem 1.15rem;
+  border-radius:var(--rs);
+  font-size:.82rem;
+  font-weight:800;
+  letter-spacing:.2px;
+  margin-top:10px;
+}
+/* Confusion matrix — clean schematic boxes */
+.cm-wrap{
+  display:grid;
+  grid-template-columns:130px 1fr 1fr;
+  grid-template-rows:44px 1fr 1fr;
+  gap:8px;
+  margin:10px 0;
+}
+.cm-corner{background:transparent;}
+.cm-col-hdr,.cm-row-hdr{
+  display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;font-weight:800;color:#5B21B6;
+  background:#F5F3FF;border-radius:var(--rs);padding:0 8px;
+}
+.cm-cell{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:1px solid var(--line-strong);border-radius:var(--rs);padding:18px 10px;text-align:center;
+  background:var(--surface);
+}
+.cm-cell .cm-n{font-size:1.6rem;font-weight:800;line-height:1.05;}
+.cm-cell .cm-desc{font-size:.68rem;color:var(--muted);margin-top:5px;line-height:1.35;}
+.threshold-metric-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+}
+.threshold-metric{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 12px;border:1px solid var(--line);border-radius:var(--rs);
+  background:var(--surface);
+}
+.threshold-metric span{font-size:.72rem;color:var(--muted);line-height:1.3;}
+.threshold-metric strong{font-size:.86rem;color:var(--ink);font-variant-numeric:tabular-nums;}
+/* Solid Cell colour layer */
+.hero-banner{
+  background:#DC0000;
+  border-radius:12px;
+  padding:22px 24px 16px;
+  margin-bottom:18px;
+}
+.hero-banner .hero-copy{margin-bottom:.9rem;}
+.hero-banner .hero-kicker{color:#DDD6FE;}
+.hero-banner .page-title{color:#FFFFFF;}
+.hero-banner .page-title::after{background:#F0ABFC;}
+.hero-banner .page-subtitle{color:rgba(255,255,255,.88);}
+.hero-banner .summary-grid{margin-bottom:0;}
+.hero-banner .summary-tile{
+  background:rgba(255,255,255,.14)!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  border-top:3px solid #F0ABFC!important;
+}
+.hero-banner .summary-label{color:rgba(255,255,255,.8);}
+.hero-banner .summary-value{color:#FFFFFF;}
+.hero-banner .summary-detail{color:rgba(255,255,255,.84);}
+.chip{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.metric-chip{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.summary-tile{background:var(--tint,#F5F3FF);border-top:3px solid var(--tile,var(--accent));}
+.stage-tile{background:var(--stint,#F5F3FF);border-top:3px solid var(--stage,var(--accent));}
+.summary-tile.accent-blue{--tile:#06B6D4;--tint:#ECFEFF;--tile-ink:#0E7490;}
+.summary-tile.accent-teal{--tile:#A855F7;--tint:#FAF5FF;--tile-ink:#7E22CE;}
+.summary-tile.accent-navy{--tile:#7C3AED;--tint:#F5F3FF;--tile-ink:#6D28D9;}
+.summary-tile.accent-salmon{--tile:#EC4899;--tint:#FDF2F8;--tile-ink:#BE185D;}
+.summary-tile.accent-crimson{--tile:#DC2626;--tint:#FEF2F2;--tile-ink:#B91C1C;}
+.stage-1{--stage:#06B6D4;--stint:#ECFEFF;--stage-ink:#0E7490;}
+.stage-2{--stage:#7C3AED;--stint:#F5F3FF;--stage-ink:#6D28D9;}
+.stage-3{--stage:#EC4899;--stint:#FDF2F8;--stage-ink:#BE185D;}
+.stage-4{--stage:#F59E0B;--stint:#FFFBEB;--stage-ink:#B45309;}
+.cm-cell.cm-tp,.cm-cell.cm-fn{background:#FEF2F2;border-color:#FECACA;}
+.cm-cell.cm-fp{background:#FFFBEB;border-color:#FDE68A;}
+.cm-cell.cm-tn{background:#ECFEFF;border-color:#A5F3FC;}
+.fig-no{color:#6D28D9;font-weight:800;}/* Misc */
+.disclaimer{
+  color:var(--muted);
+  font-size:.74rem;
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid #E9D5FF;
+  text-align:center;
+  line-height:1.65;
+}
+.methods h4{
+  font-size:.68rem;font-weight:800;color:#5B21B6;
+  text-transform:uppercase;letter-spacing:1.2px;margin:16px 0 8px;
+  padding-left:10px;border-left:3px solid var(--accent);
+}
+.methods p{font-size:.82rem;line-height:1.58;margin:0 0 12px;}
+.bslib-page-fill{height:100dvh!important;}
+
+/* Cell journal palette reset: breast cancer uses red as the primary accent. */
+:root{
+  --red:#E64B35;--blue:#4DBBD5;--teal:#00A087;--navy:#3C5488;--salmon:#F39B7F;
+  --lav:#8491B4;--mint:#91D1C2;--crimson:#DC0000;--brown:#7E6148;--tan:#B09C85;
+  --accent:#E64B35;--accent-dark:#DC0000;--heading:#3C5488;
+  --accent-tint:#FFF9F7;--accent-soft:#FFF3F0;--accent-line:#F3D5CE;
+}
+.navbar{
+  background:#DC0000!important;
+  box-shadow:0 4px 14px rgba(230,75,53,.24)!important;
+}
+.bslib-sidebar-layout>.sidebar{background:var(--accent-tint)!important;}
+.sec,.form-label,.page-title,.card-header,.chip-lbl,.summary-label,
+.section-title,.note-title,.tbl th,.cm-col-hdr,.cm-row-hdr,
+.methods h4{color:var(--heading)!important;}
+.form-control:focus,.form-select:focus{
+  box-shadow:0 0 0 3px rgba(230,75,53,.16)!important;
+}
+.irs-single{background:var(--accent)!important;}
+.irs-single::before{border-top-color:var(--accent)!important;}
+.card{border-color:var(--accent-line)!important;}
+.card-header{
+  background:var(--accent-tint)!important;
+  border-bottom-color:var(--accent-line)!important;
+}
+.chip,.summary-tile,.figure-frame .shiny-html-output img{
+  border-color:var(--accent-line);
+}
+.nav-tabs{
+  border-bottom-color:var(--accent-line)!important;
+  background:var(--accent-tint)!important;
+}
+.nav-tabs .nav-link{color:var(--heading)!important;}
+.nav-tabs .nav-link:hover{background:var(--accent-soft)!important;}
+.tbl th{background:var(--accent-tint);}
+.tbl tr:hover td{background:var(--accent-tint);}
+.figure-caption,.disclaimer{border-top-color:var(--accent-line);}
+.prob-bar-wrap{background:var(--accent-soft);}
+.cm-col-hdr,.cm-row-hdr{background:var(--accent-soft);}
+.hero-banner{
+  background:#DC0000!important;
+}
+.hero-banner .hero-kicker,
+.hero-banner .page-title,
+.hero-banner .summary-label{color:#FFFFFF!important;}
+.hero-banner .summary-detail{color:rgba(255,255,255,.84)!important;}
+.hero-banner .page-title::after{background:#91D1C2;}
+.hero-banner .summary-tile{border-top-color:#91D1C2!important;}
+.chip,.metric-chip,.summary-tile{background:var(--tint,var(--accent-soft));}
+.stage-tile{background:var(--stint,var(--accent-soft));}
+.summary-tile.accent-blue{--tile:#4DBBD5;--tint:#EFF8FA;--tile-ink:#3C5488;}
+.summary-tile.accent-teal{--tile:#00A087;--tint:#EFF9F7;--tile-ink:#00A087;}
+.summary-tile.accent-navy{--tile:#3C5488;--tint:#F1F3F7;--tile-ink:#3C5488;}
+.summary-tile.accent-salmon{--tile:#F39B7F;--tint:#FFF4F0;--tile-ink:#E64B35;}
+.summary-tile.accent-crimson{--tile:#DC0000;--tint:#FFF1F0;--tile-ink:#DC0000;}
+.stage-1{--stage:#4DBBD5;--stint:#EFF8FA;--stage-ink:#3C5488;}
+.stage-2{--stage:#00A087;--stint:#EFF9F7;--stage-ink:#00A087;}
+.stage-3{--stage:#3C5488;--stint:#F1F3F7;--stage-ink:#3C5488;}
+.stage-4{--stage:#F39B7F;--stint:#FFF4F0;--stage-ink:#E64B35;}
+.cm-cell.cm-tp,.cm-cell.cm-fn{background:#FFF1F0;border-color:#F39B7F;}
+.cm-cell.cm-fp{background:#FFF8F0;border-color:#B09C85;}
+.cm-cell.cm-tn{background:#EFF9F7;border-color:#91D1C2;}
+.fig-no{color:var(--accent);}
+@media (max-width: 1100px){
+  .summary-grid,.note-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media (max-width: 900px){
+  html,body{font-size:14px;}
+  .bslib-sidebar-layout>.sidebar{padding:1rem .95rem 1.3rem;}
+  .bslib-sidebar-layout>.main{padding:14px!important;}
+  .page-title{font-size:clamp(1.55rem,7vw,2rem);}
+  .page-subtitle{font-size:.9rem;}
+  .plot-frame{height:clamp(210px,58vw,290px);}
+  .plot-frame.plot-map{height:clamp(210px,58vw,290px);}
+  .plot-frame.plot-wide{height:clamp(230px,68vw,340px);}
+  .figure-frame{height:clamp(190px,52vw,260px);}
+  .figure-frame.figure-frame-wide{height:clamp(240px,68vw,340px);}
+  .result-frame.result-map{min-height:clamp(210px,58vw,290px);}
+  .result-frame.result-gauge{min-height:clamp(210px,54vw,280px);}
+  .nav-tabs .nav-link{padding:.5rem .8rem;font-size:.74rem;}
+  .cm-wrap{grid-template-columns:96px 1fr 1fr;grid-template-rows:38px 1fr 1fr;}
+}
+@media (max-width: 700px){
+  .summary-grid,.note-grid{grid-template-columns:1fr;}
+  .threshold-metric-grid{grid-template-columns:1fr;}
+  .page-title{font-size:1.42rem;}
+  .navbar{padding:.7rem .85rem;}
+}
+"""# ── 4. UI ────────────────────────────────────────────────────────────────────
+
 # Keep the active interface theme in one deployable stylesheet.
 _CSS = (Path(__file__).parent / "theme.css").read_text(encoding="utf-8")
 
@@ -1191,6 +1700,7 @@ def _summary_tile(label: str, value: str, detail: str, accent: str) -> ui.Tag:
 
 def _section_head(kicker: str, title: str, copy: str) -> ui.Tag:
     return ui.tags.div(
+        ui.tags.div(kicker, class_="section-eyebrow"),
         ui.tags.h4(title, class_="section-title"),
         ui.tags.p(copy, class_="section-copy"),
         class_="section-head",
@@ -1233,14 +1743,41 @@ app_ui = ui.page_fluid(
     ui.tags.style(_CSS),
     ui.tags.div(
         ui.tags.div(
+            ui.tags.div("Clinical prediction dashboard", class_="hero-kicker"),
             ui.tags.h3("Breast Cancer Classification", class_="page-title"),
             ui.tags.p(
-                "Wisconsin Diagnostic Breast Cancer · LASSO logistic regression",
+                "Wisconsin Diagnostic Breast Cancer | Seven selected inputs with training-only preprocessing.",
                 class_="page-subtitle",
             ),
             class_="hero-copy",
         ),
-        ui.tags.span("Research use only", class_="app-status"),
+        ui.tags.div(
+            _summary_tile(
+                "Cohort",
+                f"{N_TOTAL}",
+                f"{n_benign} benign / {n_malignant} malignant cases",
+                "accent-blue",
+            ),
+            _summary_tile(
+                "Selected features",
+                f"{N_SEL} of {len(FEAT_NAMES)}",
+                "selected using the λ₁ₛₑ rule",
+                "accent-teal",
+            ),
+            _summary_tile(
+                "Test discrimination",
+                f"{AUC_TEST:.3f}",
+                f"training AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
+                "accent-navy",
+            ),
+            _summary_tile(
+                "Test Brier score",
+                f"{BRIER_TEST:.3f}",
+                f"HL p={HL_P:.3f} · null Brier {NULL_BRIER:.3f}",
+                "accent-salmon",
+            ),
+            class_="summary-grid",
+        ),
         class_="hero-banner",
     ),
 
@@ -1249,15 +1786,15 @@ app_ui = ui.page_fluid(
             "Prediction",
             _section_head(
                 "Individual prediction",
-                "Individual prediction",
-                "Enter seven measurements to estimate malignancy probability. Compare inputs with training-set medians below.",
+                "Case-level malignancy estimate",
+                "Enter the retained feature values to estimate malignancy probability and compare each value with its training-set median.",
             ),
             ui.tags.div(
                 _input_panel(),
                 ui.tags.div(
                     ui.output_ui("pred_chips"),
                     ui.card(
-                        ui.card_header("Measurements and training reference"),
+                        ui.card_header("Feature Values vs. Training Medians"),
                         ui.output_ui("feat_table"),
                     ),
                     class_="prediction-results",
@@ -1373,6 +1910,7 @@ app_ui = ui.page_fluid(
             ),
             ui.layout_columns(
                 ui.card(
+                    ui.card_header("Training Set — Predicted Probability Distribution"),
                     ui.tags.div(
                         ui.output_ui("hist_img"),
                         class_="chart-image chart-square",
@@ -1405,33 +1943,6 @@ app_ui = ui.page_fluid(
                 "Model evaluation",
                 "Selection, performance, calibration, and diagnostics",
                 "Review held-out performance, selected coefficients, and the diagnostic figures stored with the deployed model bundle.",
-            ),
-            ui.tags.div(
-                _summary_tile(
-                    "Cohort",
-                    f"{N_TOTAL}",
-                    f"{n_benign} benign / {n_malignant} malignant cases",
-                    "accent-blue",
-                ),
-                _summary_tile(
-                    "Selected features",
-                    f"{N_SEL} of {len(FEAT_NAMES)}",
-                    "selected using the λ₁ₛₑ rule",
-                    "accent-teal",
-                ),
-                _summary_tile(
-                    "Test discrimination",
-                    f"{AUC_TEST:.3f}",
-                    f"training AUC {AUC_TRAIN:.3f} / test AUC {AUC_TEST:.3f}",
-                    "accent-navy",
-                ),
-                _summary_tile(
-                    "Test Brier score",
-                    f"{BRIER_TEST:.3f}",
-                    f"HL p={HL_P:.3f} · null Brier {NULL_BRIER:.3f}",
-                    "accent-salmon",
-                ),
-                class_="summary-grid",
             ),
             ui.navset_pill(
                 ui.nav_panel(
