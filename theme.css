@@ -70,7 +70,6 @@ html, body {
   border-radius: 2px; background-color: white; color: var(--ink); font-size: 14px; box-shadow: none;
 }
 .form-select { padding-right: 28px; }
-.card .shiny-input-container { width: 100%; min-width: 0; }
 .form-control:hover, .form-select:hover { border-color: #777; }
 .form-control:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .btn-primary {
