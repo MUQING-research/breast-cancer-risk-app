@@ -1152,7 +1152,7 @@ def _make_visit_map_bc(visits, user_lat=None, user_lon=None,
 
 # ── 4. CSS ───────────────────────────────────────────────────────────────────
 # Keep the active interface theme in one deployable stylesheet.
-_CSS = (Path(__file__).parent / "theme.css").read_text(encoding="utf-8")
+_CSS = (Path(__file__).parent / "compact_theme.css").read_text(encoding="utf-8")
 
 
 def _slider_step(lo: float, hi: float) -> float:
@@ -1189,12 +1189,61 @@ def _summary_tile(label: str, value: str, detail: str, accent: str) -> ui.Tag:
     )
 
 
-def _section_head(kicker: str, title: str, copy: str) -> ui.Tag:
+def _section_head(_kicker: str, title: str, copy: str) -> ui.Tag:
     return ui.tags.div(
-        ui.tags.div(kicker, class_="section-kicker"),
         ui.tags.h4(title, class_="section-title"),
         ui.tags.p(copy, class_="section-copy"),
         class_="section-head",
+    )
+
+
+def _context_item(label: str, value: str, detail: str) -> ui.Tag:
+    return ui.tags.div(
+        ui.tags.div(label, class_="context-label"),
+        ui.tags.div(value, class_="context-value"),
+        ui.tags.div(detail, class_="context-detail"),
+        class_="context-item",
+    )
+
+
+def _prediction_data_context() -> ui.Tag:
+    return ui.tags.section(
+        ui.tags.div(
+            ui.tags.h5("Data and split", class_="context-title"),
+            ui.tags.p(
+                "The deployed classifier uses the fixed development split summarized below.",
+                class_="context-copy",
+            ),
+            class_="context-heading",
+        ),
+        ui.tags.div(
+            _context_item(
+                "Dataset",
+                "Wisconsin Diagnostic Breast Cancer",
+                "UCI dataset distributed with scikit-learn",
+            ),
+            _context_item(
+                "Outcome",
+                "Malignant vs benign",
+                f"{n_malignant} malignant / {n_benign} benign",
+            ),
+            _context_item("Cohort", f"{N_TOTAL} cases", "Complete diagnostic records"),
+            _context_item("Train / test", f"{N_TRAIN} / {N_TEST}", "Cases in each partition"),
+            _context_item("Split protocol", "80 / 20", f"Outcome-stratified, seed {SEED}"),
+            _context_item(
+                "Model inputs",
+                f"{N_SEL} of {len(FEAT_NAMES)}",
+                "LASSO-selected measurements",
+            ),
+            class_="context-grid",
+        ),
+        ui.tags.p(
+            "Imputation, scaling, feature selection, and model fitting used the training partition only. "
+            "The held-out test partition is reserved for evaluation.",
+            class_="context-note",
+        ),
+        class_="data-context",
+        **{"aria-label": "Dataset and split summary"},
     )
 
 
@@ -1234,10 +1283,9 @@ app_ui = ui.page_fluid(
     ui.tags.style(_CSS),
     ui.tags.div(
         ui.tags.div(
-            ui.tags.div("Clinical prediction workbench", class_="hero-kicker"),
-            ui.tags.h3("Breast Cancer Classification", class_="page-title"),
+            ui.tags.h1("Breast Cancer Classification", class_="page-title"),
             ui.tags.p(
-                "Wisconsin Diagnostic Breast Cancer · LASSO logistic regression",
+                "Wisconsin Diagnostic Breast Cancer | LASSO logistic regression",
                 class_="page-subtitle",
             ),
             class_="hero-copy",
@@ -1254,6 +1302,7 @@ app_ui = ui.page_fluid(
                 "Individual prediction",
                 "Enter seven measurements to estimate malignancy probability. Compare inputs with training-set medians below.",
             ),
+            _prediction_data_context(),
             ui.tags.div(
                 _input_panel(),
                 ui.tags.div(
