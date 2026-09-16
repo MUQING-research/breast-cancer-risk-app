@@ -1197,52 +1197,34 @@ def _section_head(_kicker: str, title: str, copy: str) -> ui.Tag:
     )
 
 
-def _context_item(label: str, value: str, detail: str) -> ui.Tag:
+def _hero_metadata() -> ui.Tag:
     return ui.tags.div(
-        ui.tags.div(label, class_="context-label"),
-        ui.tags.div(value, class_="context-value"),
-        ui.tags.div(detail, class_="context-detail"),
-        class_="context-item",
-    )
-
-
-def _prediction_data_context() -> ui.Tag:
-    return ui.tags.section(
-        ui.tags.div(
-            ui.tags.h5("Data and split", class_="context-title"),
-            ui.tags.p(
-                "The deployed classifier uses the fixed development split summarized below.",
-                class_="context-copy",
-            ),
-            class_="context-heading",
+        ui.tags.span(ui.tags.strong(f"{N_TOTAL}"), " cases", class_="hero-meta-item"),
+        ui.tags.span(
+            ui.tags.strong(f"{N_TRAIN} / {N_TEST}"),
+            " train / test",
+            class_="hero-meta-item",
         ),
-        ui.tags.div(
-            _context_item(
-                "Dataset",
-                "Wisconsin Diagnostic Breast Cancer",
-                "UCI dataset distributed with scikit-learn",
-            ),
-            _context_item(
-                "Outcome",
-                "Malignant vs benign",
-                f"{n_malignant} malignant / {n_benign} benign",
-            ),
-            _context_item("Cohort", f"{N_TOTAL} cases", "Complete diagnostic records"),
-            _context_item("Train / test", f"{N_TRAIN} / {N_TEST}", "Cases in each partition"),
-            _context_item("Split protocol", "80 / 20", f"Outcome-stratified, seed {SEED}"),
-            _context_item(
-                "Model inputs",
-                f"{N_SEL} of {len(FEAT_NAMES)}",
-                "LASSO-selected measurements",
-            ),
-            class_="context-grid",
+        ui.tags.span(
+            ui.tags.strong("80 / 20"),
+            f" outcome-stratified, seed {SEED}",
+            class_="hero-meta-item",
         ),
-        ui.tags.p(
-            "Imputation, scaling, feature selection, and model fitting used the training partition only. "
-            "The held-out test partition is reserved for evaluation.",
-            class_="context-note",
+        ui.tags.span(
+            ui.tags.strong(f"{n_malignant} / {n_benign}"),
+            " malignant / benign",
+            class_="hero-meta-item",
         ),
-        class_="data-context",
+        ui.tags.span(
+            ui.tags.strong(f"{N_SEL} of {len(FEAT_NAMES)}"),
+            " model inputs",
+            class_="hero-meta-item",
+        ),
+        ui.tags.span(
+            "Training-only preprocessing; held-out test evaluation.",
+            class_="hero-meta-note",
+        ),
+        class_="hero-meta",
         **{"aria-label": "Dataset and split summary"},
     )
 
@@ -1288,6 +1270,7 @@ app_ui = ui.page_fluid(
                 "Wisconsin Diagnostic Breast Cancer | LASSO logistic regression",
                 class_="page-subtitle",
             ),
+            _hero_metadata(),
             class_="hero-copy",
         ),
         ui.tags.span("Research use only", class_="app-status"),
@@ -1302,7 +1285,6 @@ app_ui = ui.page_fluid(
                 "Individual prediction",
                 "Enter seven measurements to estimate malignancy probability. Compare inputs with training-set medians below.",
             ),
-            _prediction_data_context(),
             ui.tags.div(
                 _input_panel(),
                 ui.tags.div(
