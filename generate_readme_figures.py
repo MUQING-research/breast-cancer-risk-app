@@ -6,7 +6,6 @@ import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
-from sklearn.calibration import calibration_curve
 
 mpl.rcParams.update({
     'font.family'      : 'Arial',
@@ -96,12 +95,27 @@ def _display_name(feature: str) -> str:
     return feature.replace("worst ", "").capitalize()
 
 
+def _quantile_calibration_points(
+    target: np.ndarray,
+    probability: np.ndarray,
+    n_points: int = 10,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return exactly n_points equal-frequency malignancy calibration estimates."""
+    observed = 1.0 - np.asarray(target, dtype=float)
+    predicted = 1.0 - np.asarray(probability, dtype=float)
+    order = np.argsort(predicted, kind="stable")
+    groups = np.array_split(order, n_points)
+    mean_predicted = np.array([predicted[group].mean() for group in groups])
+    observed_fraction = np.array([observed[group].mean() for group in groups])
+    return mean_predicted, observed_fraction
+
+
 def _model_performance_figure(bundle: dict) -> None:
-    fig = plt.figure(figsize=(7.0, 10.5), dpi=300)
+    fig = plt.figure(figsize=(7.0, 8.5), dpi=300)
     grid = fig.add_gridspec(
         2,
         2,
-        height_ratios=(1.0, 2.3),
+        height_ratios=(1.0, 2.0),
     )
 
     ax = fig.add_subplot(grid[0, 0])
@@ -137,17 +151,15 @@ def _model_performance_figure(bundle: dict) -> None:
     _panel_title(ax, "A", "Discrimination")
     ax.legend(loc="lower right", frameon=False)
 
-    train_fraction, train_mean = calibration_curve(
-        np.asarray(bundle["y_tr"], dtype=int),
-        np.asarray(bundle["PROB_TRAIN"], dtype=float),
-        n_bins=10,
-        strategy="quantile",
+    train_mean, train_fraction = _quantile_calibration_points(
+        bundle["y_tr"],
+        bundle["PROB_TRAIN"],
+        n_points=10,
     )
-    test_fraction, test_mean = calibration_curve(
-        np.asarray(bundle["y_te"], dtype=int),
-        np.asarray(bundle["PROB_TEST"], dtype=float),
-        n_bins=10,
-        strategy="quantile",
+    test_mean, test_fraction = _quantile_calibration_points(
+        bundle["y_te"],
+        bundle["PROB_TEST"],
+        n_points=10,
     )
 
     ax = fig.add_subplot(grid[0, 1])
@@ -163,27 +175,28 @@ def _model_performance_figure(bundle: dict) -> None:
     ax.plot(
         train_mean,
         train_fraction,
-        color=SECONDARY_COLOR,
-        linewidth=1.0,
-        marker="o",
-        markersize=4,
-        markerfacecolor="white",
-        markeredgecolor=SECONDARY_COLOR,
-        label=f"Train Brier = {bundle['BRIER_TRAIN']:.3f}",
-    )
-    ax.plot(
-        test_mean,
-        test_fraction,
         color=PRIMARY_COLOR,
         linewidth=1.0,
         marker="o",
         markersize=4,
-        label=f"Test Brier = {bundle['BRIER_TEST']:.3f}",
+        markerfacecolor="white",
+        markeredgecolor=PRIMARY_COLOR,
+        label=f"Train: 10 points | Brier = {bundle['BRIER_TRAIN']:.3f}",
+    )
+    ax.plot(
+        test_mean,
+        test_fraction,
+        color=SECONDARY_COLOR,
+        linewidth=1.0,
+        linestyle="--",
+        marker="o",
+        markersize=4,
+        label=f"Test: 10 points | Brier = {bundle['BRIER_TEST']:.3f}",
     )
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1.02)
-    ax.set_xlabel("Predicted probability of benign disease")
-    ax.set_ylabel("Observed benign fraction")
+    ax.set_xlabel("Predicted malignancy probability")
+    ax.set_ylabel("Observed malignant fraction")
     _panel_title(ax, "B", "Calibration")
     ax.legend(loc="upper left", frameon=False)
 
@@ -193,37 +206,27 @@ def _model_performance_figure(bundle: dict) -> None:
     order = np.argsort(coefficients)
     ordered_values = coefficients[order]
     ordered_names = [bundle["DESIGN_COLS"][index] for index in order]
-    colors = [
-        SECONDARY_COLOR if value >= 0 else PRIMARY_COLOR
-        for value in ordered_values
-    ]
     y_positions = np.arange(len(ordered_names))
-    ax.barh(
-        y_positions,
-        ordered_values,
-        color=colors,
-        edgecolor="none",
-        height=0.58,
-    )
+    for y_pos, value in zip(y_positions, ordered_values):
+        color = SECONDARY_COLOR if value >= 0 else PRIMARY_COLOR
+        ax.plot([0, value], [y_pos, y_pos], color=color, linewidth=1.0)
+        ax.plot(value, y_pos, marker="o", markersize=4, color=color)
     ax.axvline(0, color=REFERENCE_COLOR, linewidth=0.8)
+    ax.set_xscale("symlog", linthresh=10, linscale=1.0)
     ax.set_yticks(y_positions)
     ax.set_yticklabels(ordered_names)
-    ax.set_xlabel("Scaled design-term coefficient for benign outcome")
+    ax.set_xlabel("Scaled coefficient for benign outcome (symmetric log scale)")
     _panel_title(ax, "C", "Fitted spline coefficients")
 
-    coefficient_span = max(float(np.ptp(ordered_values)), 1.0)
-    lower_limit = min(float(ordered_values.min()) - 0.65, -0.65)
-    upper_limit = max(float(ordered_values.max()) + 0.65, 0.65)
-    ax.set_xlim(lower_limit, upper_limit)
     for y_pos, value in zip(y_positions, ordered_values):
-        offset = coefficient_span * 0.025
-        ax.text(
-            value + (offset if value >= 0 else -offset),
-            y_pos,
+        ax.annotate(
             f"{value:.2f}",
+            xy=(value, y_pos),
+            xytext=(4 if value >= 0 else -4, 0),
+            textcoords="offset points",
             va="center",
             ha="left" if value >= 0 else "right",
-            fontsize=8,
+            fontsize=7,
             color=TEXT_COLOR,
         )
     _save_figure(fig, "model_performance.png")

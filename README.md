@@ -118,7 +118,7 @@ The figures below are rendered from the checked-in `bc_bundle.pkl`, so they corr
 
 #### Discrimination, calibration, and fitted coefficients
 
-Panel A compares the train and held-out test ROC curves. Panel B shows train/test calibration and Brier scores. Panel C shows the 28 fitted spline-basis coefficients after robust scaling. Individual basis coefficients are not raw-input effects; their joint contribution defines each input's fitted curve.
+Panel A compares the train and held-out test ROC curves. Panel B shows malignancy calibration using 10 equal-frequency groups per split together with Brier scores; coincident estimates may overlap. Panel C shows all 28 fitted spline-basis coefficients after robust scaling on a symmetric-log axis so both small and very large values remain visible. Individual basis coefficients are not raw-input effects; their joint contribution defines each input's fitted curve.
 
 ![Train and test ROC curves, calibration, and fitted logistic-regression coefficients](assets/model_performance.png)
 
