@@ -1,6 +1,7 @@
 /* Compact clinical dashboard using a restrained Cell navy accent. */
 :root {
   color-scheme: light;
+  --app-scale: 1.125;
   --ink: #242424;
   --ink-soft: #424242;
   --muted: #616161;
@@ -29,6 +30,7 @@ html, body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
+body { zoom: var(--app-scale); }
 .dashboard-shell { width: 100%; max-width: 1480px; margin: auto; padding: 0 16px 16px; }
 .hero-banner {
   display: flex;
@@ -44,6 +46,18 @@ html, body {
 .page-title { margin: 0 0 1px; color: var(--ink); font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -.2px; }
 .page-subtitle { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
 .app-status { flex-shrink: 0; padding: 3px 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12px; }
+.hero-actions { display: flex; flex-shrink: 0; align-items: center; gap: 6px; }
+.text-scale-label { margin: 0 0 0 4px; color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.text-scale-select {
+  width: auto;
+  height: 32px;
+  padding: 4px 28px 4px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background-color: var(--surface);
+  color: var(--ink);
+  font: 600 12px Arial, Helvetica, sans-serif;
+}
 
 /* Global tabs remain compact and use color only for the active state. */
 .dashboard-shell > .nav-tabs {
@@ -100,8 +114,8 @@ html, body {
 .hero-meta-item strong { color: var(--ink); font-weight: 700; }
 .hero-meta-note { color: var(--accent); }
 
-.prediction-workspace { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 7px; align-items: start; margin: 0 0 7px; }
-.input-panel { min-width: 0; padding: 8px; border: 1px solid var(--line); background: var(--surface); }
+.prediction-workspace { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 7px; align-items: stretch; margin: 0 0 7px; }
+.input-panel { min-width: 0; height: 100%; padding: 8px; border: 1px solid var(--line); background: var(--surface); }
 .input-title { margin: 0 0 2px; color: var(--ink); font-size: 16px; font-weight: 700; }
 .input-copy, .input-hint { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
 .input-copy { margin: 0 0 8px; }
@@ -154,8 +168,10 @@ html, body {
   font-weight: 700;
 }
 .card-body { min-width: 0; padding: 8px !important; }
-.prediction-results { min-width: 0; display: grid; gap: 6px; }
+.prediction-results { min-width: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; }
 .prediction-results > .card, .prediction-results .infobar { margin: 0; }
+.prediction-results > .card { display: flex; flex-direction: column; height: 100%; }
+.prediction-results > .card > .card-body { flex: 1; min-height: 0; }
 .summary-grid, .stage-grid, .note-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 7px; }
 .cohort-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .summary-tile, .stage-tile, .chip, .metric-chip { min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
@@ -319,7 +335,8 @@ table:has(tbody td:nth-child(6).num) th:nth-child(6) { text-align: right; }
 @media (max-width: 700px) {
   .dashboard-shell { padding-right: 9px; padding-left: 9px; }
   .hero-banner { align-items: flex-start; gap: 10px; }
-  .app-status { display: none; }
+  .app-status, .text-scale-label { display: none; }
+  .hero-actions { margin-left: auto; }
   .dashboard-shell > .nav-tabs { overflow-x: auto; }
   .dashboard-shell > .nav-tabs > .nav-item { flex: 0 0 auto; }
   .dashboard-shell > .nav-tabs .nav-link { width: auto; padding-right: 13px; padding-left: 13px; }

@@ -1154,6 +1154,29 @@ def _make_visit_map_bc(visits, user_lat=None, user_lon=None,
 # Keep the active interface theme in one deployable stylesheet.
 _CSS = (Path(__file__).parent / "compact_theme.css").read_text(encoding="utf-8")
 
+_TEXT_SCALE_JS = """
+(() => {
+  const storageKey = "medictio-text-scale";
+  const allowed = new Set(["1", "1.125", "1.25"]);
+  const applyScale = (value) => {
+    const scale = allowed.has(value) ? value : "1.125";
+    document.documentElement.style.setProperty("--app-scale", scale);
+    return scale;
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const control = document.getElementById("text-scale");
+    if (!control) return;
+    let saved = "1.125";
+    try { saved = localStorage.getItem(storageKey) || saved; } catch (_) {}
+    control.value = applyScale(saved);
+    control.addEventListener("change", () => {
+      const value = applyScale(control.value);
+      try { localStorage.setItem(storageKey, value); } catch (_) {}
+    });
+  });
+})();
+"""
+
 
 def _slider_step(lo: float, hi: float) -> float:
     rng = hi - lo
@@ -1263,6 +1286,7 @@ def _view_notes(*notes):
 
 app_ui = ui.page_fluid(
     ui.tags.style(_CSS),
+    ui.tags.script(_TEXT_SCALE_JS),
     ui.tags.div(
         ui.tags.div(
             ui.tags.h1("Breast Cancer Classification", class_="page-title"),
@@ -1273,7 +1297,19 @@ app_ui = ui.page_fluid(
             _hero_metadata(),
             class_="hero-copy",
         ),
-        ui.tags.span("Research use only", class_="app-status"),
+        ui.tags.div(
+            ui.tags.span("Research use only", class_="app-status"),
+            ui.tags.label("Text size", class_="text-scale-label", **{"for": "text-scale"}),
+            ui.tags.select(
+                ui.tags.option("Standard", value="1"),
+                ui.tags.option("Comfortable", value="1.125", selected="selected"),
+                ui.tags.option("Large", value="1.25"),
+                id="text-scale",
+                class_="text-scale-select",
+                **{"aria-label": "Interface text size"},
+            ),
+            class_="hero-actions",
+        ),
         class_="hero-banner",
     ),
 
