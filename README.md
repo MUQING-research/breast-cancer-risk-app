@@ -9,7 +9,11 @@ An interactive [Shiny for Python](https://shiny.posit.co/py/) dashboard for brea
 
 ## Application preview
 
-![Breast cancer classification dashboard](assets/breast_cancer_app.png)
+| Individual prediction | Decision-threshold analysis |
+|---|---|
+| [![Breast cancer individual prediction](assets/breast_cancer_app.png)](assets/breast_cancer_app.png) | [![Breast cancer decision-threshold analysis](assets/breast_cancer_threshold.png)](assets/breast_cancer_threshold.png) |
+| Model performance and calibration | Functional-form and collinearity diagnostics |
+| [![Breast cancer model evaluation](assets/breast_cancer_evaluation.png)](assets/breast_cancer_evaluation.png) | [![Breast cancer model diagnostics](assets/breast_cancer_diagnostics.png)](assets/breast_cancer_diagnostics.png) |
 
 ## Overview
 
