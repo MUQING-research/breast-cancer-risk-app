@@ -90,24 +90,36 @@ def roc_figure(data):
                   "Dotted line: chance.")
 
 
+def _quantile_calibration_points(target, probability, n_points=10):
+    """Return exactly n_points equal-frequency calibration estimates."""
+    observed = 1 - np.asarray(target, dtype=float)
+    predicted = 1 - np.asarray(probability, dtype=float)
+    order = np.argsort(predicted, kind="stable")
+    groups = np.array_split(order, n_points)
+    mean_predicted = np.array([predicted[group].mean() for group in groups])
+    observed_fraction = np.array([observed[group].mean() for group in groups])
+    group_sizes = np.array([len(group) for group in groups], dtype=int)
+    return mean_predicted, observed_fraction, group_sizes
+
+
 def calibration_figure(data):
-    from sklearn.calibration import calibration_curve
 
     fig, ax = canvas("Probability calibration")
     for label, target, probability, brier, color, style in (
         ("Train", data["y_tr"], data["PROB_TRAIN"], data["BRIER_TRAIN"], CELL_COLORS[0], "-"),
         ("Test", data["y_te"], data["PROB_TEST"], data["BRIER_TEST"], CELL_COLORS[1], "--"),
     ):
-        observed, predicted = calibration_curve(
-            1 - target, 1 - probability, n_bins=10, strategy="quantile")
+        predicted, observed, group_sizes = _quantile_calibration_points(
+            target, probability, n_points=10)
         ax.plot(predicted, observed, color=color, linestyle=style,
                 linewidth=1, marker="o", markersize=4,
-                label=f"{label} Brier = {brier:.3f}")
+                label=f"{label}: 10 points | Brier = {brier:.3f}")
     ax.plot([0, 1], [0, 1], color=CELL_COLORS[2], linestyle=":", linewidth=1)
     ax.set(xlim=(0, 1), ylim=(0, 1.04),
            xlabel="Predicted malignancy probability", ylabel="Observed malignant fraction")
     legend(ax, loc="upper left")
-    return finish(fig, "WDBC | 10 quantile bins per split. Dotted line: perfect calibration.")
+    return finish(fig, "WDBC | 10 equal-frequency calibration points per split. "
+                  "Dotted line: perfect calibration.")
 
 
 def path_figure(data, feature):

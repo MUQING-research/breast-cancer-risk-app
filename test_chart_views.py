@@ -24,6 +24,20 @@ class ChartViewTests(unittest.TestCase):
                             charts.linearity_figure(data, feature)))
         return figures
 
+    def test_calibration_uses_exactly_ten_equal_frequency_points(self):
+        for target, probability, expected_sizes in (
+            (application.y_tr, application.PROB_TRAIN, {45, 46}),
+            (application.y_te, application.PROB_TEST, {11, 12}),
+        ):
+            predicted, observed, group_sizes = charts._quantile_calibration_points(
+                target, probability, n_points=10)
+            self.assertEqual(len(predicted), 10)
+            self.assertEqual(len(observed), 10)
+            self.assertEqual(len(group_sizes), 10)
+            self.assertEqual(set(group_sizes), expected_sizes)
+            self.assertTrue(np.all(np.diff(predicted) >= 0))
+            self.assertTrue(np.all((observed >= 0) & (observed <= 1)))
+
     def test_figure_bounds_style_and_png_dimensions(self):
         for fig in self.figures():
             with self.subTest(title=fig.axes[0].get_title(loc="left")):

@@ -1424,7 +1424,7 @@ app_ui = ui.page_fluid(
                     ui.output_ui("cm_display"),
                     class_="equal-card",
                 ),
-                col_widths=[6, 6],
+                col_widths=[7, 5],
             ),
             ui.card(
                 ui.card_header("Performance at the Selected Threshold"),
@@ -1818,27 +1818,27 @@ def server(input, output, session):
   <p style="font-size:.70rem;color:{_MUTED};margin-bottom:6px;">
     Threshold = {thr:.2f} · Positive class = Malignant · Training set (n={N_TRAIN})
   </p>
-  <div class="cm-wrap">
+  <div class="cm-wrap" role="table" aria-label="Training confusion matrix">
     <div class="cm-corner"></div>
     <div class="cm-col-hdr">Predicted<br>Malignant</div>
     <div class="cm-col-hdr">Predicted<br>Benign</div>
     <div class="cm-row-hdr">Actual<br>Malignant</div>
     <div class="cm-cell cm-tp">
-      <span class="cm-n" style="color:{CLR_MAL};">{tp}</span>
-      <span class="cm-desc">True Positive<br>(malignancy correctly identified)</span>
+      <span class="cm-n">{tp}</span>
+      <span class="cm-desc"><b>True positive</b><br>Malignancy identified</span>
     </div>
     <div class="cm-cell cm-fn">
-      <span class="cm-n" style="color:{CLR_REF};">{fn}</span>
-      <span class="cm-desc">False Negative<br><b>malignancy missed</b></span>
+      <span class="cm-n">{fn}</span>
+      <span class="cm-desc"><b>False negative</b><br>Malignancy missed</span>
     </div>
     <div class="cm-row-hdr">Actual<br>Benign</div>
     <div class="cm-cell cm-fp">
-      <span class="cm-n" style="color:{CLR_1SE};">{fp}</span>
-      <span class="cm-desc">False Positive<br>(benign case flagged as malignant)</span>
+      <span class="cm-n">{fp}</span>
+      <span class="cm-desc"><b>False positive</b><br>Benign case flagged</span>
     </div>
     <div class="cm-cell cm-tn">
-      <span class="cm-n" style="color:{CLR_BEN};">{tn}</span>
-      <span class="cm-desc">True Negative<br>(benign case correctly identified)</span>
+      <span class="cm-n">{tn}</span>
+      <span class="cm-desc"><b>True negative</b><br>Benign identified</span>
     </div>
   </div>
 </div>
