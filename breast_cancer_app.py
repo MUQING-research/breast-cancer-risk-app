@@ -1624,7 +1624,7 @@ def server(input, output, session):
         return ui.HTML(f"""
 <div style="padding:4px 6px;">
   <div style="text-align:center;margin-bottom:12px;">
-    <div style="font-size:1.9rem;font-weight:700;color:{_NAVY};">{total}</div>
+    <div style="font-size:1.45rem;font-weight:700;color:{_NAVY};">{total}</div>
     <div style="font-size:.62rem;color:{_MUTED};text-transform:uppercase;
                 letter-spacing:.8px;">Total Visits</div>
   </div>
