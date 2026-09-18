@@ -10,6 +10,7 @@ import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
+from sklearn.calibration import calibration_curve
 
 mpl.rcParams.update({
     'font.family'      : 'Arial',
@@ -122,14 +123,17 @@ def _quantile_calibration_points(
     probability: np.ndarray,
     n_points: int = 10,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return exactly n_points equal-frequency malignancy calibration estimates."""
-    observed = 1.0 - np.asarray(target, dtype=float)
+    """Return canonical quantile-binned malignant calibration estimates."""
+    malignant = (np.asarray(target, dtype=int) == 0).astype(int)
     predicted = 1.0 - np.asarray(probability, dtype=float)
-    order = np.argsort(predicted, kind="stable")
-    groups = np.array_split(order, n_points)
-    mean_predicted = np.array([predicted[group].mean() for group in groups])
-    observed_fraction = np.array([observed[group].mean() for group in groups])
-    return mean_predicted, observed_fraction
+    observed_fraction, mean_predicted = calibration_curve(
+        malignant,
+        predicted,
+        n_bins=n_points,
+        strategy="quantile",
+    )
+    order = np.argsort(mean_predicted, kind="stable")
+    return mean_predicted[order], observed_fraction[order]
 
 
 # Function guide: _model_performance_figure is responsible for perform performance figure.
@@ -206,7 +210,7 @@ def _model_performance_figure(bundle: dict) -> None:
         markersize=4,
         markerfacecolor="white",
         markeredgecolor=PRIMARY_COLOR,
-        label=f"Train: 10 points | Brier = {bundle['BRIER_TRAIN']:.3f}",
+        label=f"Train: 10 quantile bins | Brier = {bundle['BRIER_TRAIN']:.3f}",
     )
     ax.plot(
         test_mean,
@@ -216,7 +220,7 @@ def _model_performance_figure(bundle: dict) -> None:
         linestyle="--",
         marker="o",
         markersize=4,
-        label=f"Test: 10 points | Brier = {bundle['BRIER_TEST']:.3f}",
+        label=f"Test: 10 quantile bins | Brier = {bundle['BRIER_TEST']:.3f}",
     )
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1.02)

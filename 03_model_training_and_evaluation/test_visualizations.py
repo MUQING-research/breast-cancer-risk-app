@@ -12,6 +12,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.calibration import calibration_curve
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "04_model_deployment"))
 import breast_cancer_app as application
@@ -53,6 +54,25 @@ class VisualizationTests(unittest.TestCase):
             self.assertEqual(set(group_sizes), expected_sizes)
             self.assertTrue(np.all(np.diff(predicted) >= 0))
             self.assertTrue(np.all((observed >= 0) & (observed <= 1)))
+
+    # Function guide: test_calibration_uses_malignant_probability_and_canonical_bins is responsible for verify calibration semantics.
+    # Inputs: saved target labels and probability predictions.
+    # Outputs: assertions that the plotted points match sklearn's quantile calibration definition.
+    def test_calibration_uses_malignant_probability_and_canonical_bins(self):
+        for target, probability in (
+            (application.y_tr, application.PROB_TRAIN),
+            (application.y_te, application.PROB_TEST),
+        ):
+            expected_observed, expected_predicted = calibration_curve(
+                (np.asarray(target) == 0).astype(int),
+                1.0 - np.asarray(probability, dtype=float),
+                n_bins=10,
+                strategy="quantile",
+            )
+            predicted, observed, _ = charts._quantile_calibration_points(
+                target, probability, n_points=10)
+            np.testing.assert_allclose(predicted, expected_predicted)
+            np.testing.assert_allclose(observed, expected_observed)
 
     # Function guide: test_figure_bounds_style_and_png_dimensions is responsible for test figure bounds style and png dimensions.
     # Inputs: the component state. Outputs and side effects follow the routine contract.

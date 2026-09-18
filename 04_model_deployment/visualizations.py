@@ -13,6 +13,7 @@ import textwrap
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.calibration import calibration_curve
 
 mpl.rcParams.update({
     "font.family": ["Arial", "sans-serif"],
@@ -113,13 +114,20 @@ def roc_figure(data):
 # Inputs: target, probability, n_points. Outputs and side effects follow the routine contract.
 # Keep this boundary focused on one workflow step so it remains easy to test and reuse.
 def _quantile_calibration_points(target, probability, n_points=10):
-    """Return exactly n_points equal-frequency calibration estimates."""
-    observed = 1 - np.asarray(target, dtype=float)
+    """Return canonical quantile-binned malignant calibration estimates."""
+    malignant = (np.asarray(target, dtype=int) == 0).astype(int)
     predicted = 1 - np.asarray(probability, dtype=float)
-    order = np.argsort(predicted, kind="stable")
-    groups = np.array_split(order, n_points)
-    mean_predicted = np.array([predicted[group].mean() for group in groups])
-    observed_fraction = np.array([observed[group].mean() for group in groups])
+    observed_fraction, mean_predicted = calibration_curve(
+        malignant,
+        predicted,
+        n_bins=n_points,
+        strategy="quantile",
+    )
+    order = np.argsort(mean_predicted, kind="stable")
+    mean_predicted = mean_predicted[order]
+    observed_fraction = observed_fraction[order]
+    rank_order = np.argsort(predicted, kind="stable")
+    groups = np.array_split(rank_order, n_points)
     group_sizes = np.array([len(group) for group in groups], dtype=int)
     return mean_predicted, observed_fraction, group_sizes
 
@@ -138,13 +146,13 @@ def calibration_figure(data):
             target, probability, n_points=10)
         ax.plot(predicted, observed, color=color, linestyle=style,
                 linewidth=1, marker="o", markersize=4,
-                label=f"{label}: 10 points | Brier = {brier:.3f}")
+                label=f"{label}: 10 quantile bins | Brier = {brier:.3f}")
     ax.plot([0, 1], [0, 1], color=CELL_COLORS[2], linestyle=":", linewidth=1)
     ax.set(xlim=(0, 1), ylim=(0, 1.04),
            xlabel="Predicted malignancy probability", ylabel="Observed malignant fraction")
     legend(ax, loc="upper left")
-    return finish(fig, "WDBC | 10 equal-frequency calibration points per split. "
-                  "Dotted line: perfect calibration.")
+    return finish(fig, "WDBC | Positive class: malignant; probability = P(malignant). "
+                  "Canonical quantile bins; dotted line: perfect calibration.")
 
 
 # Function guide: path_figure is responsible for perform figure.

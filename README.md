@@ -165,7 +165,7 @@ The figures below are rendered from the checked-in `04_model_deployment/breast_c
 
 #### Discrimination, calibration, and fitted coefficients
 
-Panel A compares the train and held-out test ROC curves. Panel B shows malignancy calibration using 10 equal-frequency groups per split together with Brier scores; coincident estimates may overlap. Panel C shows the seven regularized linear coefficients after robust scaling.
+Panel A compares the train and held-out test ROC curves. Panel B shows calibration for the malignant class using `P(malignant) = 1 - P(benign)`, canonical 10-bin quantile grouping, and Brier scores; coincident estimates may overlap. Panel C shows the seven regularized linear coefficients after robust scaling.
 
 ![Train and test ROC curves, calibration, and fitted logistic-regression coefficients](docs/assets/model_performance.png)
 
