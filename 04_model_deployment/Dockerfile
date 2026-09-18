@@ -1,0 +1,18 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libfreetype6-dev fontconfig fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY breast_cancer_app.py app.py breast_cancer_model_bundle.pkl world.geojson compact_theme.css ./
+COPY preprocessing_decisions.json ./
+COPY visualizations.py ./
+
+EXPOSE 7860
+
+CMD ["shiny", "run", "app.py", "--host", "0.0.0.0", "--port", "7860"]

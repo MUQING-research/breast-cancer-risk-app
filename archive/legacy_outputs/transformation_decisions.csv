@@ -1,0 +1,31 @@
+﻿feature,lrt_chi2,lrt_p_value,lrt_linear,final_treatment,transform,tertile_q1,tertile_q2,note
+mean radius,0.827,0.843,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean texture,25.79,0.0,No,continuous_original,none,,,LRT p<0.10 but judged linear by visual inspection of logit plot
+mean perimeter,1.386,0.7089,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean area,0.064,0.9957,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean smoothness,5.196,0.158,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean compactness,5.009,0.1711,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean concavity,42.013,0.0,No,continuous_original,none,,,LRT p<0.10 but judged linear by visual inspection of logit plot
+mean concave points,2.258,0.5207,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean symmetry,2.603,0.457,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+mean fractal dimension,13.739,0.0033,No,categorical_tertile,tertile (T1/T2/T3),0.05913,0.064326818,Non-linear pattern confirmed by LRT + GAM; categorized as tertiles
+radius error,3.565,0.3125,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+texture error,14.038,0.0029,No,categorical_tertile,tertile (T1/T2/T3),0.9200818399999999,1.336,Non-linear pattern confirmed by LRT + GAM; categorized as tertiles
+perimeter error,5.229,0.1558,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+area error,4.756,0.1905,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+smoothness error,5.191,0.1583,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+compactness error,38.043,0.0,No,continuous_transformed,1/x,,,Visual inspection confirmed linearity after 1/x transformation
+concavity error,110.413,0.0,No,categorical_tertile,tertile (T1/T2/T3),0.018125456,0.03574409,Non-linear pattern confirmed by LRT + GAM; categorized as tertiles
+concave points error,42.788,0.0,No,continuous_original,none,,,LRT p<0.10 but judged linear by visual inspection of logit plot
+symmetry error,18.579,0.0003,No,categorical_tertile,tertile (T1/T2/T3),0.016139545999999998,0.021420454000000002,Non-linear pattern confirmed by LRT + GAM; categorized as tertiles
+fractal dimension error,27.786,0.0,No,continuous_transformed,1/x,,,Visual inspection confirmed linearity after 1/x transformation
+worst radius,0.098,0.9921,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst texture,15.147,0.0017,No,continuous_original,none,,,LRT p<0.10 but judged linear by visual inspection of logit plot
+worst perimeter,0.499,0.9191,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst area,0.416,0.9368,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst smoothness,1.576,0.665,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst compactness,0.877,0.8311,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst concavity,36.854,0.0,No,continuous_original,none,,,LRT p<0.10 but judged linear by visual inspection of logit plot
+worst concave points,2.331,0.5067,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst symmetry,3.769,0.2875,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
+worst fractal dimension,3.932,0.2689,Yes,continuous_original,none,,,Passed LRT linearity test (p>=0.10)
